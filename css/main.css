@@ -1,0 +1,27 @@
+/* Genesis Lab - main styles. Colors come from PLAN.md section 7. */
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #050B18; /* midnight navy */
+  color: #CFE8FF;      /* ice white */
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.splash {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* navy glow in the center fading to midnight navy at the edges */
+  background: radial-gradient(circle at center, #0A1630 0%, #050B18 70%);
+}
+
+.splash h1 {
+  margin: 0;
+  font-size: clamp(2rem, 8vw, 5rem);
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  padding-left: 0.3em; /* balances the letter spacing so the text sits truly centered */
+  color: #22E5FF;      /* neon cyan */
+  text-shadow: 0 0 24px rgba(34, 229, 255, 0.45);
+}

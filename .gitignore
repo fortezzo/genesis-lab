@@ -1,0 +1,18 @@
+# Windows and Mac system files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor settings
+.vscode/
+.idea/
+*.swp
+
+# Logs and temporary files
+*.log
+*.tmp
+~$*
+
+# Tools we don't use, just in case
+node_modules/
+

@@ -1,0 +1,742 @@
+# Evolution Simulator — Build Plan
+
+Nov 7, 2026 · Christian Fortezzo
+
+Genesis Lab is a browser ecosystem where creatures with neural-network brains evolve by themselves. This plan takes it from an empty folder to a live GitHub link in about 10–12 hours over five sessions. Sections 4–10 are the detailed spec the builder follows; the rest is for you.
+
+## 1. At a glance
+
+| Item | Plan |
+| --- | --- |
+| What | A living ecosystem in the browser where creatures with neural-network brains evolve by themselves |
+| Name | Genesis Lab |
+| World | A microscopic ocean inside a circular lab culture dish |
+| Look | Neon cyan and green life on deep navy; predators glow magenta-red |
+| Runs on | Any modern browser, laptop or phone, with no install, accounts or API keys |
+| Built with | Plain JavaScript and HTML Canvas, with the neural networks written from scratch |
+| Live link after launch | fortezzo.github.io/genesis-lab |
+| Total time | About 10–12 hours: a setup step plus 4 build sessions |
+| Builder | Claude, in your Genesis Lab PowerShell tab, working only inside the Genesis Lab folder |
+| Your role | Director and tester: you play it, judge it and say what to change, with no coding |
+
+## 2. Vision, audience and success
+
+Genesis Lab should make people ask "how did you build that?" within 10 seconds of opening the link.
+
+**Tagline:** Every creature has a brain. None of them were programmed. Watch them learn.
+
+**The three jaw-drop moments**
+
+1. **The first 10 seconds:** the screen fades in on a glowing microscopic ocean that already looks expensive.
+2. **Minute 5:** creatures that bumped into walls now beeline for food, and nobody taught them.
+3. **The click:** select any creature and its brain opens up, neurons firing live as it hunts.
+
+After that, predators appear by themselves, species rise and go extinct, and the lab log tells the story.
+
+**Who it's for**
+
+- **Recruiters and employers:** proof you can take an ambitious idea from plan to shipped product.
+- **Engineers:** neural networks and evolution written from scratch, with no AI libraries.
+- **Your social audience:** a mesmerizing clip that's easy to share.
+
+**Launch checklist: all of these must pass**
+
+- [ ] Opens from the live link in under 3 seconds on a laptop and a phone
+- [ ] Runs at 60 fps with 300 creatures on a typical laptop, and 30 fps or better on a phone
+- [ ] Foraging skill at least doubles within 10 simulated minutes (5 minutes of watching at the default 2x speed), and the chart shows it
+- [ ] Predators evolve on their own in at least 3 of 5 worlds within 20 simulated minutes
+- [ ] A stranger can explain what's happening after 30 seconds, with no help
+- [ ] Runs for 1 hour unattended without crashing, freezing or slowing down
+- [ ] The README has a looping demo GIF and a working "Try it live" link, and the repo is pinned on your profile
+
+**What it is not**
+
+- Not an exact biology model. It's inspired by real evolution and tuned to be watchable.
+- Not a game you win or lose. It's a sandbox you watch and mess with.
+- No servers, logins, payments or AI services. Everything runs on the visitor's device.
+
+## 3. How it works, in plain English
+
+Picture a drop of seawater under a microscope, sped up a million times: nobody designs the behavior, and the world selects it.
+
+**The life loop** (drawn as a diagram in the online doc):
+
+```text
+Start: 60 random creatures
+  -> 1 See:       5 view slices spot food, creatures and the dish edge
+  -> 2 Think:     a neural network turns senses into decisions
+  -> 3 Act:       swim, turn, bite, or try to have a baby
+  -> 4 Survive:   moving and thinking cost energy; eating pays it back
+                  (energy runs out -> the creature dies and makes room for others)
+  -> 5 Reproduce: well-fed adults split off a baby that copies them
+  -> 6 Mutate:    copies of DNA and brain change a tiny bit at random
+  -> back to 1 See
+
+In the middle of the loop: SELECTION.
+Better foragers live longer and have more babies, so their changes spread.
+```
+
+Read it from See onward: one lap is one lifetime, and selection is why the next lap goes a little better.
+
+Most random changes do nothing or hurt. Now and then a baby is slightly better at finding food, so it lives longer and leaves more babies. Hundreds of generations later, those tiny gains add up to creatures that hunt, flee, school together and split into species.
+
+## 4. The world
+
+The dish is a 4,000-unit-wide circle of water where algae grows near drifting nutrient vents, and the population stays between 20 and 400 creatures.
+
+**The dish**
+
+- A circular culture dish, 2,000 units in radius, with a soft wall: creatures that touch the edge are pushed back and burn extra energy.
+- A microscope scale bar (for example "100 µm") updates as you zoom, for a real-lab feel.
+
+**Time**
+
+- The simulation runs in fixed steps of 60 ticks per simulated second, separate from drawing, so it behaves the same on fast and slow devices.
+- Speeds: pause, 1x, 2x (the default), 4x, 16x and Max, which runs as many ticks as fit in about 12 ms per frame.
+- Every world has a seed number. The same seed and settings always give the same starting world.
+
+**Water and currents**
+
+- A slow, swirling current made from smooth noise drifts food and nudges creatures, so the dish feels alive before anything evolves.
+
+**Nutrient vents**
+
+- 4 vents drift slowly around the dish. Algae grows fastest near a vent and rarely in open water.
+- This creates geography: crowded feeding grounds, empty stretches, and migrations as the vents move.
+
+**Food**
+
+| Food | Where it comes from | Energy | Behavior |
+| --- | --- | --- | --- |
+| Algae | Grows near vents, up to 1,500 pieces at once | 25 | Pulses softly and drifts with the current |
+| Meat | Left behind when a creature dies (from Session 3) | Most of the dead creature's stored energy | Glows amber and decays after 60 seconds |
+
+**Population limits**
+
+- Start: 60 random creatures.
+- Floor: below 20 creatures, new primitive creatures drift in, so the world never dies. The lab log records each arrival.
+- Cap: 400 creatures on laptops and 150 on phones. At the cap, nobody can reproduce until there's room.
+
+## 5. The creatures
+
+Each creature is 9 body genes plus a 390-number brain, and every trait has a cost, so no single design wins forever.
+
+**Genes**
+
+| Gene | Range | Helps with | Costs |
+| --- | --- | --- | --- |
+| Size (radius) | 6–24 units | Stores more energy, wins fights | Slower, and burns more energy every second |
+| Top speed | 30–150 units/sec | Reaching food first, escaping | Fast swimming burns energy fast |
+| Turn speed | 1–6 radians/sec | Dodging and chasing | A small energy cost |
+| Sight range | 60–320 units | Spotting food and danger early | Bigger eyes cost energy |
+| Field of view | 60°–300° | Seeing all around | Each view slice gets wider and vaguer |
+| Diet | 0 (plants) to 1 (meat) | Unlocks a food source | In-between diets digest both poorly |
+| Baby investment | 20–60% of energy | Stronger babies | Leaves the parent weak |
+| Mutation rate | 2–30% | Faster change | More broken babies |
+| Clock speed | 0.1–2 cycles/sec | An inner rhythm for zigzags and patterns | None |
+
+**Why in-between diets lose:** plant digestion = (1 − diet)² and meat digestion = diet². A pure plant-eater gets 100% from algae, but a 50/50 creature gets only 25% from each food. This jack-of-all-trades penalty pushes family lines to specialize, which is what splits predators from prey.
+
+**Senses: 25 brain inputs**
+
+| Input | Count | Meaning |
+| --- | --- | --- |
+| Food per view slice | 5 | How close the nearest food is, weighted by how nutritious it is for this creature's diet |
+| Creature per view slice | 5 | How close the nearest creature is |
+| Size per view slice | 5 | That creature's size compared with mine: −1 much smaller, +1 much bigger |
+| Dish edge | 3 | How close the wall is, plus two numbers for which way the center lies |
+| Body | 4 | Energy, health, age and current speed |
+| Inner clock | 1 | A wave that rises and falls at the clock-speed gene |
+| Memory | 2 | Two values the brain wrote on the last tick |
+
+The field of view is split into 5 equal slices. Each creature asks the spatial grid for nearby things, puts each one in its slice, and keeps the nearest per slice. That's far cheaper than true ray tracing and looks the same.
+
+**Brain**
+
+- A neural network written from scratch: 25 inputs → 12 hidden neurons → 6 outputs, with tanh activation.
+- 390 numbers in total: 300 weights and 12 biases into the hidden layer, 72 weights and 6 biases into the outputs. They're stored in the DNA as one Float32Array.
+- It runs once per tick for every creature.
+
+**Actions: 6 brain outputs**
+
+| Output | Effect |
+| --- | --- |
+| Thrust | Swim forward, from 0 to top speed |
+| Turn | Turn left or right, up to turn speed |
+| Bite | Attack whatever touches its mouth (does nothing until Session 3) |
+| Reproduce | Try to have a baby, if it's mature and has enough energy |
+| Memory 1 and Memory 2 | Store two values for the next tick |
+
+**Energy**
+
+- Max energy grows with size squared: a size-10 creature holds 100 energy, or four pieces of algae.
+- Each second costs upkeep (by size²), swimming (by speed² × size), eyes (by sight range × field of view) and a small thinking cost.
+- Eating gives the food's energy × the creature's digestion for that food.
+- Health is separate. Bites lower it, and it slowly regrows by spending energy.
+- Old age: past 70% of a 4-minute lifespan, upkeep climbs until the creature dies and makes room.
+- Every starting number lives in config.js with a comment, so balancing means editing numbers, not rewriting code.
+
+**Fighting (from Session 3)**
+
+- With bite on and another creature touching its mouth, a creature deals damage per second based on its size × diet.
+- Bigger targets take longer to bring down, and biting costs energy.
+- A kill leaves meat pellets worth most of the victim's stored energy.
+
+**Babies**
+
+- A creature can reproduce when its reproduce output is on, its energy is above 60% of max, and it's at least 10 seconds old.
+- The baby gets the parent's baby-investment share of energy, and the parent pays a further 10% birth cost.
+- Babies start at half size and grow to full size as they mature, so you can watch them grow.
+
+**Mutation**
+
+- Each gene changes with a chance equal to the mutation-rate gene: usually a nudge of about 10% of its range, and 1% of the time a big jump.
+- Each brain number has the same chance: a nudge of about ±0.3, or a 0.5% chance of a fresh random value, kept within −4 to 4.
+- The mutation rate mutates too, so evolution tunes its own speed.
+
+**Deaths are tracked by cause:** starvation, eaten, old age or disaster.
+
+## 6. Species and the story engine
+
+Species form automatically when a family line drifts far enough from its founder, and the lab log turns each split, boom and extinction into a story.
+
+**How a species forms**
+
+- Every species remembers its founder's DNA.
+- Genetic distance = the average gene difference (each gene scaled to its range) plus the average brain-number difference (also scaled), on a 0–1 scale.
+- A baby more than 0.35 from its species' founder starts a new species, with itself as the founder.
+
+**Names**
+
+- Each new species gets a generated Latin-style name, such as *Lumivora cyanea* or *Ferox noctis*.
+- The first word hints at diet: gentle-sounding for plant-eaters, fierce for meat-eaters. The second is built from random syllables.
+
+**Colors show family**
+
+- A new species takes its parent species' color, nudged slightly, so related species look related.
+- Plant-eaters stay in the cyan-to-green range and meat-eaters in magenta-to-orange, so you can read the food chain from across the room.
+
+**Lab log**
+
+A live feed of short lines, for example:
+
+- Gen 112 · New species: *Ferox lumen*, a meat-eater
+- *Algivora prima* went extinct after 41 generations
+- Population crash: 63% of life lost in the drought
+- Record: specimen #4821 lived 6 minutes and had 23 babies
+
+**Champion**
+
+- The champion is the living creature with the best score: babies × 3 + minutes alive.
+- Follow champion flies the camera to it.
+
+**Family tree (Session 3)**
+
+- A branching timeline of species: each branch starts when a species appears and ends when it dies out.
+- Branch thickness shows population. Living species glow; extinct ones fade to gray.
+- Click a branch to highlight that species in the dish.
+
+## 7. Visual style guide
+
+The look is a bioluminescent deep ocean seen through a high-end lab microscope, and every screen should be good enough to screenshot.
+
+**Palette**
+
+| Role | Color | Hex |
+| --- | --- | --- |
+| Background, edges | Midnight navy | #050B18 |
+| Background, center | Navy glow | #0A1630 |
+| Plant-eaters, main accent | Neon cyan | #22E5FF |
+| Algae, growth | Neon green | #39FF88 |
+| Meat-eaters, danger | Magenta-red | #FF3D6E |
+| Meat, warnings | Amber | #FFB020 |
+| Main text | Ice white | #CFE8FF |
+| Secondary text | Steel blue | #6E87A8 |
+| Panel borders | Faint cyan line | rgba(140, 200, 255, 0.15) |
+
+**Creatures**
+
+- Soft glowing bodies from pre-rendered glow sprites with additive blending, so overlapping light blooms like the real thing.
+- A translucent membrane outline around a brighter nucleus.
+- Two eyes facing the heading, with pupils that shift toward whatever the creature is chasing.
+- A tail (flagellum) that waves faster as the creature swims faster.
+- Meat-eaters get a spiky membrane and a mouth notch, so diet shows in shape, not just color.
+- Short fading light trails behind moving creatures.
+- A ring flash at birth, a pulse when eating, and a burst of particles at death.
+
+**The world**
+
+- A radial navy gradient with a dark vignette at the edges.
+- A faint microscope reticle (grid lines and a crosshair) that scales with zoom.
+- Dust particles drifting at two depths, for a 3D parallax feel.
+- Subtle moving light patterns (caustics) across the water.
+- Algae that breathes with a slow pulse, and vents shown as dim clouds of color.
+
+**Interface**
+
+- Frosted-glass panels: a blurred background, a thin cyan border and 12 px rounded corners.
+- Fonts: Space Grotesk for headings, Inter for text and JetBrains Mono for numbers. All are free and stored in the project, so they work offline.
+- Small all-caps labels with wide letter spacing, such as POPULATION and GENERATION.
+- Numbers count smoothly to new values instead of jumping.
+
+**Motion**
+
+- Camera moves ease in and out; nothing snaps.
+- Panels slide in over about 200 ms.
+- A reduced-motion setting turns off trails, caustics and camera easing.
+
+**Accessibility**
+
+- Diet shows by shape as well as color, for color-blind viewers.
+- Panel text meets WCAG AA contrast.
+- Everything works with a mouse, touch or keyboard.
+
+## 8. Interface and controls
+
+The dish fills the screen, panels slide in only when needed, and one click on any creature opens the showpiece: its live brain.
+
+**Intro screen**
+
+- A black screen; GENESIS LAB fades in, then the tagline.
+- Two buttons: Begin experiment, and Advanced for the seed and world settings.
+- After starting, three quick tips: drag to move, scroll to zoom, click a creature to see its brain.
+
+**Laptop layout**
+
+- Top bar: logo, generation, population, species count and speed controls.
+- Left panel (collapsible): world controls and settings, plus god mode from Session 3.
+- Right panel: the inspector, opened by clicking a creature.
+- Bottom drawer: charts and the lab log.
+
+**Phone layout**
+
+- The dish full screen, a slim top bar, and a bottom sheet with tabs: Inspector, Charts, Log and World.
+- Pinch to zoom, drag to pan, tap to select.
+
+**Inspector**
+
+- Name and number (for example *Lumivora cyanea* #4821), species color, generation and age.
+- Energy and health bars, and a plant-to-meat diet meter.
+- Every gene as a mini bar compared with its species average.
+- Babies, kills, food eaten, and the cause of death if it dies while selected.
+- Parent and children links you can click to jump between them.
+- The camera follows whoever is selected. Save to Hall of Fame arrives in Session 3.
+
+**Brain viewer**
+
+- Inputs on the left with small icons, 12 hidden neurons in the middle, actions on the right.
+- Lines show connections: thicker means stronger, cyan excites and magenta calms.
+- Neurons glow with live activity, and pulses travel along strong connections as the creature thinks.
+- Hover any neuron to see its name and current value.
+- A radar under it shows the 5 view slices, so you see what the creature sees.
+
+**Charts**
+
+- Population by species over time, as a flowing stacked streamgraph in species colors.
+- Average traits over time: speed, size, sight range and diet.
+- Foraging skill: food found per creature per minute. This is the proof that they're learning.
+- Births and deaths per minute, split by cause.
+- All drawn by the project's own lightweight chart code, to match the look.
+
+**Keyboard shortcuts**
+
+| Key | Action |
+| --- | --- |
+| Space | Pause or resume |
+| 1, 2, 3, 4, 5 | Speed 1x, 2x, 4x, 16x, Max |
+| F | Follow the champion |
+| Esc | Deselect |
+| H | Hide all panels (screenshot mode) |
+| P | Save a screenshot |
+| Backtick | Debug overlay |
+
+**Settings**
+
+- Creature cap, algae growth rate, mutation strength and world size.
+- Quality: auto, high, medium or low.
+- Sound starts on at a quiet volume after Begin, with mute and a volume slider (Session 4).
+- Reduced motion, and New world with an optional seed.
+
+## 9. Technical architecture
+
+Genesis Lab is plain JavaScript in classic script files, so it runs by double-clicking index.html, with no server, build step or libraries.
+
+**System map** (drawn as a diagram in the online doc):
+
+```text
+config.js (every tunable number)              --numbers-->        Simulation
+Main loop (fixed 1/60 s ticks, then 1 frame)  --ticks-->          Simulation
+Headless test (no drawing, prints a report)   --runs it fast-->   Simulation
+
+Simulation (js/sim, pure logic, never draws):
+  World (dish, vents, currents, algae) · Creatures (genes, senses, brains, energy)
+  Species (founders, names, family colors) · Stats and events (chart samples, lab log lines)
+
+Simulation  --nearby queries-->           Spatial grid (finds neighbors fast)
+Simulation  --reads state-->              Renderer (glow sprites, camera, background, effects)
+Simulation  <--stats out, commands in-->  Interface (top bar, inspector, brain viewer, charts)
+Interface   --saves-->                    Storage (settings, Hall of Fame, saved worlds)
+```
+
+Because the simulation never draws, the headless test can run it flat out with no graphics, and drawing could later move to WebGL without touching it.
+
+**Stack**
+
+- Plain JavaScript, HTML and CSS: no frameworks, AI libraries, build tools or outside CDNs.
+- Drawing: HTML Canvas 2D with cached glow sprites and additive ("lighter") blending for a bloom look. One renderer module holds all the drawing code.
+- Scripts load in order as classic files under one global namespace, GL. That's what makes double-click work, because browsers block module scripts and web workers on local files.
+
+**Folder layout**
+
+```text
+genesis-lab/
+  index.html            the app
+  PLAN.md               this plan, exported from the doc
+  README.md, LICENSE (MIT), .gitignore
+  css/main.css
+  js/config.js          every tunable number, with a comment
+  js/core/              rng, math, noise, spatialGrid, loop
+  js/sim/               genome, brain, creature, food, world, species, names, stats, events
+  js/render/            renderer, sprites, camera, background, effects
+  js/ui/                hud, intro, inspector, brainView, charts, labLog, controls,
+                        settings, godMode, hallOfFame, familyTree
+  js/audio/sound.js
+  js/main.js            starts everything
+  assets/               fonts, icons, social-preview.png
+  tools/headless.html   runs the sim with no drawing and prints a report
+  docs/                 demo.gif and screenshots
+```
+
+**Each tick, in order**
+
+1. Rebuild the spatial grid.
+2. Sense: fill every creature's 25 inputs.
+3. Think: run every brain.
+4. Act: move, turn, eat and bite.
+5. Metabolism: charge energy costs, heal and age.
+6. Births and deaths.
+7. Grow and decay food; drift the vents and currents.
+8. Every half simulated second, sample stats for the charts.
+
+**Performance**
+
+- A spatial hash grid with 160-unit cells, so each creature checks only nearby cells instead of every other creature.
+- Object pools for creatures, food and particles, and no new objects inside a tick, to avoid garbage-collection stutters.
+- Budget with 300 creatures and 1,500 algae on a typical laptop: under 3 ms per tick and under 8 ms per drawn frame, so the default 2x speed (2 ticks per frame) holds 60 fps.
+- Only what's on screen gets drawn. If fps stays under 45 for 3 seconds, trails and particles scale down automatically.
+- Phones get lower caps, fewer particles and no caustics by default.
+
+**Saving**
+
+- Settings and the Hall of Fame go in localStorage, wrapped in try/catch so blocked storage never breaks the app.
+- Creature share codes pack genes and brain numbers into bytes, then into base64 text.
+- A whole world saves as a downloadable .json file and loads back from it.
+
+**Debug overlay (backtick key)**
+
+- Shows fps, tick and draw times, creature and food counts, grid cells, and the selected creature's view slices.
+
+**Supported browsers**
+
+- Current Chrome, Edge, Firefox and Safari on desktop, Safari on iPhone and Chrome on Android.
+
+## 10. Balancing and testing
+
+Balance makes or breaks an evolution sim, so every change is proven with a headless test run instead of judged by eye.
+
+**Tuning strategy**
+
+1. Get foraging to evolve reliably with plant-eaters only (Sessions 1 and 2).
+2. Then switch on meat-eating and tune until predators and prey can live side by side (Session 3).
+3. Change numbers in config.js rather than the code's logic wherever possible.
+
+**Headless test (tools/headless.html)**
+
+- Runs the simulation at full speed with no drawing, for example for 20 simulated minutes, across several seeds.
+- Prints a report: population over time, foraging skill at the start vs the end, species count, extinctions and deaths by cause.
+- The builder runs it after every balance change and shows you the numbers.
+
+**Health checks: must pass at the end of each session**
+
+- Foraging skill at least doubles within 10 simulated minutes, in 3 of 3 seeds.
+- Population stays between 25% and 100% of the cap for 30 simulated minutes.
+- Once creatures have evolved, the population floor kicks in less than once per 10 simulated minutes.
+- From Session 3: a meat-eater species appears in at least 3 of 5 seeds within 20 simulated minutes, and prey survive alongside it.
+
+**Your test checklist, every session**
+
+- [ ] Double-click index.html: it opens with no errors
+- [ ] Watch 5 minutes at the default speed: do they visibly get better?
+- [ ] Try every new button and shortcut
+- [ ] Take 3 screenshots: would you post them?
+- [ ] Leave it at 16x for 20 minutes: is it still smooth?
+- [ ] From Session 4, open the live link on your phone
+- [ ] Send feedback as Off, Boring, Ugly and Confusing, using the feedback prompt in section 12
+
+**Stranger test, before launch**
+
+- Show 2–3 friends with no explanation. After 30 seconds, ask what they think is happening.
+- If they can't say, fix the intro or the visuals before launch.
+
+## 11. Build sessions
+
+Five sessions take Genesis Lab from an empty folder to a live link, and each one ends at a gate that must pass before the next starts.
+
+**Roadmap** (drawn as a diagram in the online doc):
+
+```text
+Session 0 · Setup        (20–30 min)  -> Gate 0: opens on double-click; first commit
+Session 1 · It lives     (2–3 hours)  -> Gate 1: foraging doubles in 3 seeds; 60 fps
+Session 2 · Their minds  (2–3 hours)  -> Gate 2: brain viewer gets a whoa; charts show it
+Session 3 · Drama        (2–3 hours)  -> Gate 3: predators in 3 of 5 seeds; prey survive
+Session 4 · Launch       (2–4 hours)  -> Gate 4: launch checklist passes; live link works
+```
+
+Don't start a session until the gate before it passes. The times are estimates; the gate matters more than the clock.
+
+**Session 0 · Setup (you, 20–30 minutes)**
+
+1. Create the project folder (yours is OneDrive\Attachments\Genesis-Lab).
+2. Put this plan in the folder as PLAN.md.
+3. Open a new PowerShell tab in that folder, name it Genesis Lab if your terminal allows, and start Claude.
+4. Paste the Session 0 prompt from section 12.
+
+**Gate 0:** index.html opens on double-click and shows GENESIS LAB on navy, git is set up, and the first commit is saved.
+
+**Session 1 · The simulation lives (2–3 hours)**
+
+- [ ] config.js with every starting number
+- [ ] Seeded random numbers, smooth noise, the spatial grid and the fixed-step loop
+- [ ] The dish, nutrient vents, currents and algae growth
+- [ ] Creatures: genes, 5-slice senses, the 25-12-6 brain, actions, energy, health, aging and death
+- [ ] Babies with mutation, growing from half size
+- [ ] Population floor and cap
+- [ ] Drawing: background, reticle, dust, glowing creatures with eyes, tails and trails, breathing algae, birth and death effects
+- [ ] Pan, zoom, click to select and follow, plus pause and speed buttons
+- [ ] Top-bar counters: generation, population and foraging skill
+- [ ] tools/headless.html
+
+**Gate 1:** foraging skill at least doubles within 10 simulated minutes in 3 seeds, it runs at 60 fps with 300 creatures, and you can see them learning. Commit: "Session 1: core simulation and look".
+
+**Session 2 · See inside their minds (2–3 hours)**
+
+- [ ] Inspector with genes, bars, stats, and parent and children links
+- [ ] Live brain viewer: labeled inputs and outputs, glowing neurons, traveling pulses
+- [ ] Radar of the 5 view slices
+- [ ] Charts drawer: population, average traits, foraging skill, births and deaths
+- [ ] Lab log: records, booms and crashes
+- [ ] Keyboard shortcuts, champion and follow mode
+- [ ] Frosted-glass panels, fonts and smooth number tickers
+
+**Gate 2:** clicking a creature makes you say "whoa", the charts clearly show foraging rising, and open panels don't drop the frame rate. Commit: "Session 2: inspector, brain viewer, charts".
+
+**Session 3 · Predators, species and god mode (2–3 hours)**
+
+- [ ] Meat-eating, biting, meat pellets and the spiky predator look
+- [ ] Species detection, generated names and family colors
+- [ ] Species streamgraph and family tree
+- [ ] Lab log lines for new species, extinctions and crashes
+- [ ] God mode: Drought, Algae bloom, Meteor strike (click to drop), Ice age, Predator drop and Paint food
+- [ ] Hall of Fame: save up to 20 creatures, spawn them back, and share them as codes
+- [ ] Cinematic camera that cruises between births, hunts and crowds
+
+**Gate 3:** predators appear on their own in at least 3 of 5 seeds within 20 simulated minutes, prey survive, and you can tell a story from one run. Commit: "Session 3: predators, species, god mode".
+
+**Session 4 · Polish and launch (2–4 hours)**
+
+- [ ] Intro screen, tips, settings panel and reduced motion
+- [ ] Sound made in code: ambient hum, birth blips, extinction chime and interface clicks, starting quietly after Begin, with a mute button
+- [ ] Phone layout and touch controls
+- [ ] Performance pass and auto quality
+- [ ] Save and load a whole world
+- [ ] README, LICENSE and social preview image
+- [ ] Public repo and GitHub Pages (Claude asks before pushing)
+- [ ] Demo GIF and social clip
+
+**Gate 4:** every item in the launch checklist (section 2) passes, the stranger test passes, and the live link works on your phone. Commit: "Session 4: polish and launch".
+
+## 12. Copy-paste prompts
+
+Paste each prompt into your **Genesis Lab PowerShell tab**: a tab opened inside the Genesis Lab folder, with Claude running. Start a fresh Claude session for each build session.
+
+**Session 0: setup**
+
+```text
+Read PLAN.md in this folder. It is the full build plan for Genesis Lab, an evolution simulator. We are doing Session 0: setup only.
+
+1. Check that git is installed (git --version). If it isn't, tell me exactly how to install it on Windows, then stop.
+2. Create the folder layout from PLAN.md section 9. Empty files are fine for now. Add a .gitignore and an MIT LICENSE in the name Christian Fortezzo.
+3. Make index.html show a deep navy screen with GENESIS LAB in the center, so I can double-click it to check it works.
+4. Set up git in this folder and make the first commit: "Session 0: project setup".
+
+Rules: work only inside this folder, don't push anything to GitHub, and explain what you did in plain English. I don't write code.
+```
+
+**Session 1: the simulation lives**
+
+```text
+Read PLAN.md in this folder first. We are doing Session 1: "The simulation lives". Build everything in the Session 1 checklist in section 11, following the designs in sections 4, 5, 7 and 9.
+
+Rules:
+- Plain JavaScript and Canvas 2D, as classic script files under one global GL namespace, so I can run it by double-clicking index.html. No frameworks, libraries, CDNs, accounts or API keys.
+- Write the neural network and the evolution code from scratch.
+- Put every tunable number in js/config.js with a comment.
+- Plant-eaters only this session. Meat-eating waits for Session 3.
+- Build tools/headless.html and use it to tune the balance until foraging skill at least doubles within 10 simulated minutes in 3 different seeds. Show me the before and after numbers.
+- Work only in this folder. Ask before deleting anything. Don't push to GitHub.
+- I don't write code: explain in plain English what you built, how to open it and what to watch for.
+
+When everything at the Session 1 gate passes, commit with the message "Session 1: core simulation and look", then give me my test checklist from section 10.
+```
+
+**Session 2: see inside their minds**
+
+```text
+Read PLAN.md, then look at the current code. We are doing Session 2: "See inside their minds". Build everything in the Session 2 checklist in section 11, following sections 6, 7 and 8.
+
+Rules: the same as Session 1 (plain JavaScript, no libraries, every tunable number in config.js, work only in this folder, ask before deleting, no GitHub push, plain-English explanations). The brain viewer is the showpiece: make it look incredible and keep it smooth. Opening panels must not drop the frame rate.
+
+Run the headless test to confirm the simulation still learns. When the Session 2 gate passes, commit "Session 2: inspector, brain viewer, charts" and give me my test checklist from section 10.
+```
+
+**Session 3: predators, species and god mode**
+
+```text
+Read PLAN.md, then look at the current code. We are doing Session 3: "Predators, species and god mode". Build everything in the Session 3 checklist in section 11, following sections 5 and 6.
+
+Rules: the same as Session 1. Switch on meat-eating, then use the headless test to tune until a meat-eater species appears by itself in at least 3 of 5 seeds within 20 simulated minutes, with prey surviving alongside it. Show me the results for every seed.
+
+When the Session 3 gate passes, commit "Session 3: predators, species, god mode" and give me my test checklist from section 10.
+```
+
+**Session 4: polish and launch**
+
+```text
+Read PLAN.md, then look at the current code. We are doing Session 4: "Polish and launch". Build everything in the Session 4 checklist in section 11, and follow the launch plan in section 13.
+
+Rules: the same as Session 1. Go through the launch checklist in section 2 and tell me which items pass and which don't. Write the README from the outline in section 13.
+
+Stop and ask me before pushing anything to GitHub. Then walk me through creating the public repo genesis-lab on my GitHub account (fortezzo), pushing it, and turning on GitHub Pages, one step at a time. Commit "Session 4: polish and launch".
+```
+
+**Feedback between sessions**
+
+```text
+Here's my feedback from testing Genesis Lab. Fix these, run the headless test to make sure nothing broke, then commit:
+Off:
+Boring:
+Ugly:
+Confusing:
+```
+
+## 13. GitHub launch plan
+
+Launch puts Genesis Lab on a free GitHub Pages link, pinned first on your profile, with a demo GIF that shows evolution happening in 20 seconds.
+
+**Repo**
+
+- Name: genesis-lab, public, MIT license.
+- Description: "A living ecosystem where creatures with neural-network brains evolve by themselves, in your browser."
+- Topics: artificial-life, evolution-simulator, neural-network, neuroevolution, genetic-algorithm, javascript, canvas, simulation.
+- Website field: https://fortezzo.github.io/genesis-lab/
+
+**Turn on GitHub Pages**
+
+1. In the repo, open Settings, then Pages.
+2. Under Build and deployment, choose Deploy from a branch, pick the main branch and the / (root) folder, then Save.
+3. Wait 1–2 minutes, then open the live link.
+
+**README outline**
+
+1. Title and tagline
+2. Looping demo GIF: minute 1 vs minute 10
+3. A big "Try it live" link
+4. What you're looking at, in three plain sentences
+5. Features, with small screenshots
+6. How it works: the evolution loop in plain English
+7. Under the hood, for engineers: brain layout, view-slice senses, spatial grid, fixed-step loop, energy model, and no libraries
+8. Controls and shortcuts
+9. Run it yourself: download, then double-click index.html
+10. Roadmap
+11. License and font credits
+
+**Demo GIF and clip**
+
+- Record the GIF with ScreenToGif (free, for Windows): 15–20 seconds, about 900 px wide, under 10 MB.
+- Shot list: intro fade-in → a glide across the dish → creatures beelining for food → a click that lights up a brain → a predator hunt → the species streamgraph.
+- Social clip: 20–30 seconds, vertical for TikTok and Reels, with the hook on screen in the first second, such as "I built a world where creatures evolve their own brains."
+
+**Profile**
+
+- Pin genesis-lab first on your profile.
+- Upload a 1280 × 640 social preview image in the repo settings, so shared links look sharp.
+- Mention it at the top of your profile README.
+
+**Where to post**
+
+- X, TikTok, Instagram Reels and LinkedIn. On LinkedIn, frame it as what you built and what you learned.
+- Reddit communities such as r/proceduralgeneration and r/artificial, following each one's self-promotion rules.
+- Hacker News as a Show HN post, once it's polished.
+
+## 14. Risks
+
+The biggest risk is balance, so the plan builds in a population floor, one config file and a headless test from Session 1.
+
+| Risk | What it looks like | How we handle it |
+| --- | --- | --- |
+| Bad balance | Everything dies, or the dish overflows and nothing improves | Population floor and cap, every number in config.js, and a headless test after every change |
+| No visible learning | Minute 10 looks like minute 1 | Plant-eaters first, the foraging-skill chart as proof, and energy costs tuned until skill doubles |
+| Predators wipe out prey | Prey die out, then the predators starve | Big targets take longer to kill, biting costs energy, meat decays, and the floor brings in new life |
+| Slow on phones | Choppy motion and a hot phone | Lower caps, auto quality, and nothing drawn off screen |
+| Looks amateur | Flat colors and clutter | The style guide in section 7 and the screenshot test every session |
+| Scope creep | New ideas keep pushing launch back | Strict session checklists; new ideas go to section 17 |
+| A change breaks everything | The app stops working after an edit | A git commit at the end of every session, so any earlier version can come back |
+| A new chat forgets the plan | The builder doesn't know the details | PLAN.md lives in the folder, and every prompt starts with "Read PLAN.md" |
+| Doc and PLAN.md drift apart | You edit the online doc, but the folder still has the old plan | Re-export PLAN.md into the folder after any change to the doc |
+
+## 15. Decisions
+
+Every decision is made, so Session 1 can start as soon as setup is done.
+
+- Name: Genesis Lab.
+- World: a microscopic ocean in a circular culture dish.
+- Colors: neon cyan and green on deep navy, with magenta-red predators.
+- Sound: on at a quiet volume once someone clicks Begin, with a mute button.
+- Folder: OneDrive\Attachments\Genesis-Lab on your computer.
+- Tech: plain JavaScript and Canvas 2D, run by double-clicking index.html.
+- Repo: public, MIT license, on your fortezzo account.
+- Workflow: a fresh Claude session per build session, in your Genesis Lab PowerShell tab.
+
+## 16. Glossary
+
+| Term | Meaning |
+| --- | --- |
+| Neural network | A tiny artificial brain: numbers go in, get mixed by connection strengths, and decisions come out |
+| Weight | One connection strength in a brain; evolution changes these |
+| Genome (DNA) | The list of numbers that defines a creature's body and brain |
+| Mutation | A small random change to the DNA when a baby is born |
+| Generation | How many parents back a creature's family line goes |
+| Species | A group whose DNA is close enough to count as one kind |
+| Foraging skill | Food found per creature per minute; the main "are they learning?" number |
+| fps | Frames per second, or how smooth it looks; 60 is buttery |
+| Tick | One step of the simulation; 60 ticks make a simulated second |
+| Seed | A number that sets a world's randomness, so the same seed gives the same start |
+| Headless test | Running the simulation with no graphics, as fast as possible, to check the numbers |
+| Repo | A project folder on GitHub |
+| Commit | A saved checkpoint you can always go back to |
+| Push | Uploading your commits to GitHub |
+| GitHub Pages | Free GitHub hosting that turns a repo into a live website |
+| README | The front page of a repo |
+
+## 17. After launch
+
+These ideas wait until Genesis Lab is live, so they can't delay launch; add new ones here as they come up.
+
+- Two-parent babies that mix DNA
+- Brains that grow new neurons and connections (NEAT-style)
+- Glow signals other creatures can see, so they can evolve communication
+- Creature trading cards: export any creature as a stylish card image with its stats
+- Battle mode: drop your saved creature into a friend's world with a share code
+- Time-lapse video export
+- A land-world version with walking, legged creatures
+- A WebGPU mode for 10,000+ creatures
