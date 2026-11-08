@@ -1,27 +1,215 @@
-/* Genesis Lab - main styles. Colors come from PLAN.md section 7. */
+/* Genesis Lab - main styles. Colours come from PLAN.md section 7.
+   Fonts: Space Grotesk, Inter and JetBrains Mono are used when present
+   (they get bundled in Session 2); until then the system fonts stand in. */
+:root {
+  --navy-edge: #050B18;
+  --navy-center: #0A1630;
+  --cyan: #22E5FF;
+  --green: #39FF88;
+  --magenta: #FF3D6E;
+  --amber: #FFB020;
+  --text: #CFE8FF;
+  --text-dim: #8FA6C4;               /* steel blue, lightened a touch for contrast on glass */
+  --line: rgba(140, 200, 255, 0.15);
+  --glass: rgba(7, 16, 36, 0.72);
+  --font-head: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-text: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-num: "JetBrains Mono", "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+
 html, body {
   margin: 0;
   height: 100%;
-  background: #050B18; /* midnight navy */
-  color: #CFE8FF;      /* ice white */
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+  background: var(--navy-edge);
+  color: var(--text);
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.splash {
-  height: 100%;
+/* The whole scene fades in on load. */
+body > * { opacity: 0; transition: opacity 1.6s ease; }
+body.ready > * { opacity: 1; }
+body.ready > #topbar, body.ready > #scalebar { transition-delay: 0.5s; }
+body.ready > #hint { transition-delay: 1.4s; }
+
+#dish {
+  position: fixed;
+  inset: 0;
+  display: block;
+  cursor: grab;
+}
+#dish.grabbing { cursor: grabbing; }
+
+/* Frosted-glass panels: blurred background, thin cyan border, 12px corners. */
+.panel {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(160, 220, 255, 0.05);
+}
+
+/* ---------------------------------------------------------------- top bar */
+#topbar {
+  position: fixed;
+  top: 12px; left: 12px; right: 12px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  /* navy glow in the center fading to midnight navy at the edges */
-  background: radial-gradient(circle at center, #0A1630 0%, #050B18 70%);
+  gap: 28px;
+  padding: 9px 12px 9px 18px;
 }
+.brand {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.32em;
+  color: var(--cyan);
+  text-shadow: 0 0 18px rgba(34, 229, 255, 0.55);
+  white-space: nowrap;
+}
+.brand span { font-weight: 400; color: var(--text); text-shadow: none; }
 
-.splash h1 {
-  margin: 0;
-  font-size: clamp(2rem, 8vw, 5rem);
+.stats { display: flex; gap: 26px; align-items: center; }
+.stat { display: flex; flex-direction: column; gap: 1px; min-width: 64px; }
+.label {
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.3em;
-  padding-left: 0.3em; /* balances the letter spacing so the text sits truly centered */
-  color: #22E5FF;      /* neon cyan */
-  text-shadow: 0 0 24px rgba(34, 229, 255, 0.45);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.value {
+  font-family: var(--font-num);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.value small { font-size: 11px; color: var(--text-dim); margin-left: 3px; }
+.stat.skill { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 10px; min-width: 150px; }
+.stat.skill .label { flex-basis: 100%; }
+.trend {
+  font-family: var(--font-num);
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.trend.up { color: var(--green); border-color: rgba(57, 255, 136, 0.35); background: rgba(57, 255, 136, 0.08); }
+.trend.down { color: var(--amber); border-color: rgba(255, 176, 32, 0.35); background: rgba(255, 176, 32, 0.08); }
+
+.speeds { margin-left: auto; display: flex; gap: 4px; }
+.speed {
+  font-family: var(--font-num);
+  font-size: 12px;
+  min-width: 38px;
+  height: 30px;
+  padding: 0 9px;
+  color: var(--text);
+  background: rgba(140, 200, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.speed:hover { border-color: rgba(34, 229, 255, 0.4); }
+.speed:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.speed.active { color: var(--cyan); background: rgba(34, 229, 255, 0.14); border-color: rgba(34, 229, 255, 0.6); }
+.speed.pause svg { width: 12px; height: 12px; fill: currentColor; vertical-align: -1px; }
+
+/* -------------------------------------------------- selected-creature chip */
+#selection {
+  position: fixed;
+  top: 76px; left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 14px;
+  transition: opacity 0.2s, transform 0.2s;
+}
+#selection.hidden { opacity: 0; pointer-events: none; transform: translate(-50%, -8px); }
+.swatch {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: hsl(var(--hue, 185), 100%, 62%);
+  box-shadow: 0 0 12px hsl(var(--hue, 185), 100%, 55%);
+}
+.chip-name { font-family: var(--font-head); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; }
+.chip-meta { font-family: var(--font-num); font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+.energy { width: 72px; height: 6px; border-radius: 3px; background: rgba(140, 200, 255, 0.12); overflow: hidden; }
+.energy div { height: 100%; width: 50%; background: linear-gradient(90deg, var(--green), var(--cyan)); transition: width 0.25s; }
+.chip-close {
+  width: 28px; height: 28px; border-radius: 8px;
+  border: 1px solid var(--line); background: transparent; color: var(--text-dim);
+  font-size: 18px; line-height: 1; cursor: pointer;
+}
+.chip-close:hover { color: var(--text); border-color: rgba(34, 229, 255, 0.4); }
+
+/* ------------------------------------------------------------- scale bar */
+#scalebar {
+  position: fixed;
+  left: 22px; bottom: 20px;
+  display: flex; flex-direction: column; gap: 5px;
+  pointer-events: none;
+}
+#scale-line {
+  height: 6px;
+  border: 1px solid rgba(207, 232, 255, 0.75);
+  border-top: none;
+  transition: width 0.15s;
+}
+#scale-label { font-family: var(--font-num); font-size: 11px; color: var(--text); letter-spacing: 0.06em; }
+
+/* ------------------------------------------------------------------ hint */
+#hint {
+  position: fixed;
+  bottom: 20px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+}
+body.ready > #hint.gone { opacity: 0; transition-delay: 0s; }
+
+/* --------------------------------------------------------- debug overlay */
+#debug {
+  position: fixed;
+  right: 12px; bottom: 12px;
+  margin: 0;
+  padding: 10px 14px;
+  font: 11px/1.55 var(--font-num);
+  color: var(--text);
+  background: rgba(5, 11, 24, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  pointer-events: none;
+}
+#debug.hidden { display: none; }
+
+/* --------------------------------------------- narrow screens (basic fit) */
+@media (max-width: 860px) {
+  #topbar { gap: 14px; padding: 8px 8px 8px 12px; flex-wrap: wrap; row-gap: 8px; }
+  .brand { font-size: 13px; }
+  .stats { gap: 14px; }
+  .stat { min-width: 0; }
+  .stat.skill { min-width: 0; }
+  .value { font-size: 15px; }
+  #selection { top: 118px; }
+  #hint { display: none; }
+}
+@media (max-width: 520px) {
+  .stats { gap: 18px; }
+  .label { font-size: 9px; letter-spacing: 0.1em; }
+  .speeds { margin-left: 0; width: 100%; justify-content: space-between; }
+  .speed { flex: 1; min-width: 0; padding: 0 4px; }
 }

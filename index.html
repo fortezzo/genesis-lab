@@ -2,13 +2,68 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Genesis Lab</title>
+  <meta name="description" content="Every creature has a brain. None of them were programmed. Watch them learn.">
+  <meta name="theme-color" content="#050B18">
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-  <main class="splash">
-    <h1>GENESIS LAB</h1>
-  </main>
+  <canvas id="dish" aria-label="The culture dish: glowing creatures and algae"></canvas>
+
+  <header id="topbar" class="panel">
+    <div class="brand">GENESIS <span>LAB</span></div>
+    <div class="stats">
+      <div class="stat" title="The most generations any living family line goes back">
+        <span class="label">Generation</span><span class="value" id="stat-gen">0</span>
+      </div>
+      <div class="stat" title="Creatures alive right now">
+        <span class="label">Population</span><span class="value" id="stat-pop">0</span>
+      </div>
+      <div class="stat skill" title="Food found per creature per minute, over the last simulated minute">
+        <span class="label">Foraging skill</span>
+        <span class="value"><span id="stat-skill">0.0</span><small>/min</small></span>
+        <span class="trend" id="stat-trend">measuring</span>
+      </div>
+    </div>
+    <div class="speeds" id="speeds" role="group" aria-label="Simulation speed"></div>
+  </header>
+
+  <div id="selection" class="panel chip hidden" aria-live="polite">
+    <span class="swatch"></span>
+    <div class="chip-text">
+      <div id="sel-name" class="chip-name">Specimen</div>
+      <div id="sel-meta" class="chip-meta"></div>
+    </div>
+    <div class="energy" title="Energy"><div id="sel-energy"></div></div>
+    <button id="sel-close" class="chip-close" aria-label="Stop following (Esc)" title="Stop following (Esc)">&times;</button>
+  </div>
+
+  <div id="scalebar" aria-hidden="true"><div id="scale-line"></div><span id="scale-label">100 &micro;m</span></div>
+  <div id="hint">Drag to move &middot; Scroll to zoom &middot; Click a creature to follow it &middot; Space to pause</div>
+  <pre id="debug" class="hidden"></pre>
+
+  <!-- Classic scripts in order, all under one global namespace: GL. -->
+  <script src="js/config.js"></script>
+  <script src="js/core/rng.js"></script>
+  <script src="js/core/math.js"></script>
+  <script src="js/core/noise.js"></script>
+  <script src="js/core/spatialGrid.js"></script>
+  <script src="js/core/loop.js"></script>
+  <script src="js/sim/genome.js"></script>
+  <script src="js/sim/brain.js"></script>
+  <script src="js/sim/events.js"></script>
+  <script src="js/sim/stats.js"></script>
+  <script src="js/sim/food.js"></script>
+  <script src="js/sim/creature.js"></script>
+  <script src="js/sim/world.js"></script>
+  <script src="js/render/sprites.js"></script>
+  <script src="js/render/camera.js"></script>
+  <script src="js/render/background.js"></script>
+  <script src="js/render/effects.js"></script>
+  <script src="js/render/renderer.js"></script>
+  <script src="js/ui/hud.js"></script>
+  <script src="js/ui/controls.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
