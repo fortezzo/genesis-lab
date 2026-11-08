@@ -111,10 +111,15 @@ The dish is a 4,000-unit-wide circle of water where algae grows near drifting nu
 | Algae | Grows near vents, up to 1,500 pieces at once | 25 | Pulses softly and drifts with the current |
 | Meat | Left behind when a creature dies (from Session 3) | Most of the dead creature's stored energy | Glows amber and decays after 60 seconds |
 
+- **A sparse start:** a new world begins with only 60 pieces of algae (`algaeStart: 60`), so the first random creatures have to find food instead of bumping into it.
+- **Wide, thin feeding grounds:** algae grows in clouds about 700 units wide around each vent (`ventSpread: 700`), and 20% of new algae appears in open water (`algaeOpenWaterChance: 0.2`).
+- Algae regrows at up to 26 pieces per second when the dish is bare, slowing as it fills (`algaeGrowthRate: 26`). More is not better: a faster rate refills the dish during the first minute, random swimmers find food by luck, and the learning curve flattens.
+
 **Population limits**
 
 - Start: 60 random creatures.
 - Floor: below 20 creatures, new primitive creatures drift in, so the world never dies. The lab log records each arrival.
+- Settling in: every primitive creature (the 60 starters and each drift-in) arrives with a 90% full tank (`startEnergy: 0.9`) but must wait 30 seconds before it can have a baby (`primitiveSettleTime: 30`). This keeps minute 1 a fair measure of random brains, instead of one lucky family multiplying.
 - Cap: 400 creatures on laptops and 150 on phones. At the cap, nobody can reproduce until there's room.
 
 ## 5. The creatures
@@ -167,6 +172,8 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 | Reproduce | Try to have a baby, if it's mature and has enough energy |
 | Memory 1 and Memory 2 | Store two values for the next tick |
 
+**Swimming is a choice:** the thrust output runs from −1 to 1 and must pass a dead zone of 0.3 (`thrustDeadZone: 0.3`) before the creature swims at all; above that, thrust scales smoothly up to top speed. A random brain often rests instead of drifting into food by luck, so a creature that swims toward food has really learned to.
+
 **Energy**
 
 - Max energy grows with size squared: a size-10 creature holds 100 energy, or four pieces of algae.
@@ -185,6 +192,7 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 **Babies**
 
 - A creature can reproduce when its reproduce output is on, its energy is above 60% of max, and it's at least 10 seconds old.
+- It must also wait 20 seconds between babies (`reproduceCooldown: 20`). Without this pause, parents churn out doomed babies and most creatures live only about 20 seconds. With it, the parent keeps eating while it waits, so each baby is born stronger.
 - The baby gets the parent's baby-investment share of energy, and the parent pays a further 10% birth cost.
 - Babies start at half size and grow to full size as they mature, so you can watch them grow.
 
