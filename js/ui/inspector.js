@@ -43,7 +43,8 @@ GL.Inspector = (function () {
       root: $('inspector'), name: $('insp-name'), meta: $('insp-meta'), champ: $('insp-champ'), close: $('insp-close'),
       death: $('insp-death'), energy: $('insp-energy'), energyV: $('insp-energy-v'), health: $('insp-health'),
       healthV: $('insp-health-v'), diet: $('insp-diet'), dietV: $('insp-diet-v'), genes: $('insp-genes'),
-      life: $('insp-life'), family: $('insp-family'), radarNote: $('radar-note')
+      life: $('insp-life'), family: $('insp-family'), radarNote: $('radar-note'),
+      scroll: document.querySelector('#inspector .insp-scroll'), more: $('insp-more'), genesSec: $('insp-genes-sec')
     };
     this.brainView = new GL.BrainView($('brain'), $('brain-tip'));
     this.radar = new GL.RadarView($('radar'));
@@ -62,13 +63,16 @@ GL.Inspector = (function () {
     this.buildGenes();
     this.buildLife();
     var self = this;
+    this.el.more.dataset.act = 'more';
+    this.el.scroll.addEventListener('scroll', function () { self.updateMoreCue(); }, { passive: true });
     this.el.close.addEventListener('click', function () { self.app.hud.dismissDeath(); self.app.renderer.select(null); self.app.hud.update(0, true); });
     // Parent, children and "follow" buttons all work by click delegation.
     this.el.root.addEventListener('click', function (e) {
       var t = e.target.closest ? e.target.closest('[data-id],[data-act]') : null;
       if (!t) return;
       if (t.dataset.act === 'follow') { self.app.hud.followNext(); return; }
-      if (t.dataset.act === 'stay') { self.app.hud.dismissDeath(); self.app.hud.update(0, true); return; }
+      if (t.dataset.act === 'stay') { self.app.hud.stayHere(); self.refreshTimer = 0; return; }
+      if (t.dataset.act === 'more') { self.scrollToGenes(); return; }
       var id = Number(t.dataset.id), c = id ? self.app.world.findById(id) : null;
       if (c) { self.app.hud.dismissDeath(); self.app.renderer.select(c); self.app.hud.update(0, true); }
     });
@@ -116,6 +120,19 @@ GL.Inspector = (function () {
       s.turnSpeed = c.turnSpeed; s.radius = c.radius; s.fullRadius = c.fullRadius;
     },
 
+    // On short screens genes, life and family sit below the fold: fade the bottom edge and show a
+    // small button that scrolls there smoothly, until the viewer has scrolled down.
+    updateMoreCue: function () {
+      var sc = this.el.scroll, more = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 8;
+      var showBtn = more && sc.scrollTop < 40;
+      if (more !== this._more) { this._more = more; this.el.root.classList.toggle('more', more); }
+      if (showBtn !== this._moreBtn) { this._moreBtn = showBtn; this.el.more.classList.toggle('hidden', !showBtn); }
+    },
+    scrollToGenes: function () {
+      var sc = this.el.scroll;
+      sc.scrollTop = sc.scrollTop + this.el.genesSec.getBoundingClientRect().top - sc.getBoundingClientRect().top - 8;
+    },
+
     show: function (on) {
       if (on === this.open) return;
       this.open = on;
@@ -152,8 +169,8 @@ GL.Inspector = (function () {
 
       // Death notice, with the next bug to follow.
       if (!s.alive && death) {
-        var rec = death.record, left = Math.max(0, Math.ceil((death.until - performance.now()) / 1000));
-        var key = rec.id + '|' + (death.next ? death.next.id : 0) + '|' + left;
+        var rec = death.record, left = death.stay ? 0 : Math.max(0, Math.ceil((death.until - performance.now()) / 1000));
+        var key = rec.id + '|' + (death.next ? death.next.id : 0) + '|' + left + '|' + !!death.stay;
         if (key !== this.deathKey) {
           this.deathKey = key;
           el.death.innerHTML = '<b>Specimen #' + rec.id + ' ' + (DEATH_WORDS[rec.cause] || 'died') + ' at age ' + hud.clock(rec.age) + '</b>' +
@@ -161,7 +178,8 @@ GL.Inspector = (function () {
             (rec.babies === 1 ? ' baby.' : ' babies.') +
             '<div class="fam-row" style="margin-top:8px">' +
             (death.next ? '<button class="link" data-act="follow">Follow ' + death.label + ' #' + death.next.id + (left > 0 ? ' (' + left + ')' : '') + '</button>' : '') +
-            '<button class="link gone" data-act="stay" style="cursor:pointer">Stay here</button></div>';
+            (death.stay ? '<span class="fam-note">staying here: close the panel when you are done</span>'
+                        : '<button class="link gone" data-act="stay" style="cursor:pointer">Stay here</button>') + '</div>';
         }
         el.death.classList.remove('hidden');
       } else if (this.deathKey) { this.deathKey = ''; el.death.classList.add('hidden'); }
@@ -177,7 +195,8 @@ GL.Inspector = (function () {
       var diet = s.genes[G.DIET];
       el.diet.style.left = (diet * 100).toFixed(1) + '%';
       el.dietV.textContent = FORMAT.diet(diet);
-      el.radarNote.textContent = 'sees ' + FORMAT.sight(s.sight) + ' · ' + Math.round(s.fov * 180 / Math.PI) + '° wide';
+      el.radarNote.textContent = FORMAT.sight(s.sight) + ' · ' + Math.round(s.fov * 180 / Math.PI) + '°';
+      el.radarNote.title = 'It sees ' + FORMAT.sight(s.sight) + ' far, across a ' + Math.round(s.fov * 180 / Math.PI) + '° view';
 
       // Genes against the average of all living bugs.
       var list = world.creatures, n = list.length, avg = this.avg;
@@ -198,10 +217,11 @@ GL.Inspector = (function () {
       this.cells.babies.textContent = s.babies;
       this.cells.food.textContent = s.foodEaten;
       this.cells.gen.textContent = s.generation;
-      this.cells.kills.innerHTML = s.kills + ' <small>none yet</small>';
+      this.cells.kills.innerHTML = C.meatEating ? String(s.kills) : '<small>not yet</small>';
       this.cells.score.textContent = (s.babies * C.championBabyWeight + s.age / 60 * C.championMinuteWeight).toFixed(1);
 
       this.refreshFamily(s, world);
+      this.updateMoreCue();
     },
 
     // Parent and living children as links. Rebuilt only when something changes, so clicks never miss.

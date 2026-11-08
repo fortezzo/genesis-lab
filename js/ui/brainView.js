@@ -27,6 +27,10 @@ GL.BrainView = (function () {
     { name: 'Memory', icon: 'mem', color: '#9FD7E8', rows: ['memory 1', 'memory 2'] }
   ];
   var OUT_LABELS = ['walk', 'turn', 'bite', 'baby', 'memory 1', 'memory 2'];
+  // Biting does nothing until meat-eaters exist (Session 3), so until then the bite action is drawn
+  // dimmed and labelled "bite (not yet)", with no live glow, bar or pulses.
+  var BITE_IDLE = !C.meatEating, BITE_NODE = NI + NH + OUT.BITE;
+  function idleLink(c) { return BITE_IDLE && c >= NI * NH && Math.floor((c - NI * NH) / NH) === OUT.BITE; }
   var BODY_ICONS = ['energy', 'health', 'age', 'speed'];
 
   function BrainView(canvas, tip) {
@@ -146,10 +150,13 @@ GL.BrainView = (function () {
       // Every connection, bucketed by sign and strength so it takes 8 strokes, not 372.
       var paths = [], widths = [0.5, 0.8, 1.2, 1.8];
       for (k = 0; k < 8; k++) paths.push(new Path2D());
+      var idle = new Path2D();
       for (c = 0; c < NL; c++) {
         var w = this.weight(c), a = Math.abs(w), tier = a < 0.5 ? 0 : a < 1 ? 1 : a < 2 ? 2 : 3;
+        if (idleLink(c)) { this.curve(idle, c); continue; }
         this.curve(paths[(w >= 0 ? 0 : 4) + tier], c);
       }
+      g.strokeStyle = 'rgba(110, 135, 168, 0.07)'; g.lineWidth = 0.6; g.stroke(idle);
       for (k = 0; k < 8; k++) {
         var tierK = k & 3, rgb = k < 4 ? CYAN : MAGENTA;
         g.strokeStyle = M.rgba(rgb, U.brainLinkAlpha * (0.45 + tierK * 0.55));
@@ -173,7 +180,7 @@ GL.BrainView = (function () {
       // Output labels.
       g.font = '600 11px "Space Grotesk", "Inter", sans-serif';
       for (k = 0; k < NO; k++) {
-        g.fillStyle = k >= 4 ? '#8FA6C4' : '#CFE8FF';
+        g.fillStyle = k >= 4 || (k === OUT.BITE && BITE_IDLE) ? (k === OUT.BITE ? '#5C7393' : '#8FA6C4') : '#CFE8FF';
         g.fillText(OUT_LABELS[k], this.xo + 12, this.ny[NI + NH + k] - 6);
       }
       g.font = '9px "Inter", sans-serif'; g.fillStyle = '#6E87A8'; g.textAlign = 'center';
@@ -228,7 +235,7 @@ GL.BrainView = (function () {
       for (k = 0; k < 6; k++) paths[k] = new Path2D();
       for (c = 0; c < NL; c++) {
         var st = this.str[c];
-        if (st < thr || (this.hover >= 0 && !this.touchesHover(c))) continue;
+        if (st < thr || idleLink(c) || (this.hover >= 0 && !this.touchesHover(c))) continue;
         var tier = st < 0.4 ? 0 : st < 0.75 ? 1 : 2;
         this.curve(paths[(this.sig[c] >= 0 ? 0 : 3) + tier], c); counts[(this.sig[c] >= 0 ? 0 : 3) + tier]++;
       }
@@ -244,7 +251,7 @@ GL.BrainView = (function () {
       if (live && running) {
         for (c = 0; c < NL; c++) {
           st = this.str[c];
-          if (st < thr || st < U.brainPulseMinSignal) { this.acc[c] *= 0.9; continue; }
+          if (st < thr || st < U.brainPulseMinSignal || idleLink(c)) { this.acc[c] *= 0.9; continue; }
           this.acc[c] += U.brainPulseRate * st * dt;
           if (this.acc[c] >= 1) {
             this.acc[c] -= 1;
@@ -329,12 +336,15 @@ GL.BrainView = (function () {
         if (a > 0.55) { ctx.beginPath(); ctx.arc(x, y, r * 0.45 * a, 0, M.TAU); ctx.fillStyle = 'rgba(255,255,255,' + (0.9 * (a - 0.5)) + ')'; ctx.fill(); }
         ctx.beginPath(); ctx.arc(x, y, r, 0, M.TAU);
         ctx.lineWidth = i === this.hover ? 2 : 1;
-        ctx.strokeStyle = i === this.hover ? '#FFFFFF' : M.rgba(rgb, 0.35 + 0.55 * a);
+        ctx.strokeStyle = i === this.hover ? '#FFFFFF' : (i === BITE_NODE && BITE_IDLE ? 'rgba(110, 135, 168, 0.4)' : M.rgba(rgb, 0.35 + 0.55 * a));
         ctx.stroke();
       }
     },
 
-    valueOf: function (i) { return i < NI ? this.sIn[i] : (i < NI + NH ? this.sHid[i - NI] : this.sOut[i - NI - NH]); },
+    valueOf: function (i) {
+      if (i === BITE_NODE && BITE_IDLE) return 0;      // not used yet: drawn dark
+      return i < NI ? this.sIn[i] : (i < NI + NH ? this.sHid[i - NI] : this.sOut[i - NI - NH]);
+    },
 
     // Small live readouts under each action: a centred bar plus what it means right now.
     drawOutputReadouts: function (ctx) {
@@ -342,6 +352,10 @@ GL.BrainView = (function () {
       ctx.font = '9.5px "JetBrains Mono", monospace';
       for (var k = 0; k < NO; k++) {
         var v = this.sOut[k], y = this.ny[NI + NH + k] + 7;
+        if (k === OUT.BITE && BITE_IDLE) {
+          ctx.fillStyle = '#5C7393'; ctx.fillText('(not yet)', x, y + 3);
+          continue;
+        }
         ctx.fillStyle = 'rgba(140, 200, 255, 0.12)'; ctx.fillRect(x, y - 1, bw, 2);
         var fx = x + bw / 2, len = v * bw / 2;
         ctx.fillStyle = v >= 0 ? '#22E5FF' : '#FF3D6E';
@@ -449,7 +463,8 @@ GL.BrainView = (function () {
     var dz = C.thrustDeadZone;
     if (k === OUT.THRUST) return v > dz ? 'Walking at ' + Math.round((v - dz) / (1 - dz) * 100) + '% of top speed.' : 'Below ' + dz + ': standing still.';
     if (k === OUT.TURN) return Math.abs(v) < 0.08 ? 'Going straight.' : 'Turning ' + (v > 0 ? 'right' : 'left') + ' at ' + Math.round(Math.abs(v) * 100) + '% of its turn speed.';
-    if (k === OUT.BITE) return 'Bites anything at its mouth when above 0 (does nothing until predators arrive).';
+    if (k === OUT.BITE) return C.meatEating ? 'Bites anything at its mouth when above 0.'
+      : 'Not used yet: biting does nothing until meat-eaters arrive (Session 3). The brain already has the wire, so evolution can use it later.';
     if (k === OUT.REPRODUCE) return v > 0 ? 'Wants a baby: it gets one if it is grown, rested and well fed.' : 'Not trying for a baby.';
     return 'Stored for the next tick: its only memory.';
   }

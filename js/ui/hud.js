@@ -159,6 +159,14 @@ GL.HUD.prototype = {
     // Save frame rate on slow devices: panels drop their live blur at low drawing quality.
     var lite = app.renderer.quality.level < GL.Config.render.liteGlassBelowLevel;
     if (lite !== this._lite) { this._lite = lite; document.body.classList.toggle('lite', lite); }
+    // A one-time nudge toward the showpiece, if nobody has clicked a bug yet.
+    this.realTime = (this.realTime || 0) + dt;
+    if (!this.everSelected && app.renderer.getSelected()) this.everSelected = true;
+    if (!this.everSelected && !this.brainTipShown && this.realTime > GL.Config.ui.brainTipSeconds &&
+        !document.body.classList.contains('clean')) {
+      this.brainTipShown = true;
+      app.labLog.showToast({ text: 'Tip: click any glowing bug to open its brain and watch it think.', kind: 'skill' });
+    }
     this.textTimer -= dt;
     if (this.textTimer > 0 && !force) return;
     this.textTimer = 0.25;                     // text refreshes 4 times a second
@@ -227,12 +235,12 @@ GL.HUD.prototype = {
       var pick = this.findRelative(d.record);
       d.next = pick ? pick.c : null; d.nextId = pick ? pick.c.id : 0; d.label = pick ? pick.label : '';
     }
-    var left = Math.ceil((d.until - performance.now()) / 1000);
+    var left = d.stay ? 0 : Math.ceil((d.until - performance.now()) / 1000);
     if (d.next) {
       el.chipFollow.classList.remove('hidden');
       el.chipFollow.textContent = 'Follow ' + d.label + ' #' + d.next.id + (left > 0 ? ' (' + left + ')' : '');
       el.chipFollow.title = 'Switches automatically when the countdown ends. Stay here to keep watching this spot.';
-      if (left <= 0) this.followNext();
+      if (left <= 0 && !d.stay) this.followNext();
     } else {
       el.chipFollow.classList.add('hidden');
     }
@@ -245,6 +253,12 @@ GL.HUD.prototype = {
     this.dismissDeath();
     if (next) this.app.renderer.select(next);
     this.update(0, true);
+  },
+
+  // "Stay here": keep showing the bug that died and stop the countdown; the viewer can still
+  // follow the relative by hand, or close the panel.
+  stayHere: function () {
+    if (this.death) this.death.stay = true;
   },
 
   dismissDeath: function () {

@@ -63,26 +63,25 @@
         </div>
       </div>
 
+      <!-- The brain and the radar shrink with the screen height, so both always fit without scrolling. -->
       <section class="insp-sec brain-sec">
-        <div class="sec-head"><span class="label">Live brain</span><span class="sec-note">25 senses &rarr; 12 neurons &rarr; 6 actions</span></div>
+        <div class="sec-head"><span class="label">Live brain</span>
+          <span class="brain-legend" title="Hover any neuron to see what it is doing and why"><span><i class="lg exc"></i>excites</span><span><i class="lg calm"></i>calms</span><span><i class="lg pulse"></i>signal</span><span class="dim">hover a neuron</span></span>
+        </div>
         <div class="brain-wrap">
           <canvas id="brain" aria-label="The creature's neural network, firing live"></canvas>
           <div id="brain-tip" class="tip hidden"></div>
         </div>
-        <div class="brain-legend">
-          <span><i class="lg exc"></i>excites</span><span><i class="lg calm"></i>calms</span><span><i class="lg pulse"></i>signal</span><span class="dim">hover a neuron</span>
-        </div>
       </section>
 
       <section class="insp-sec">
-        <div class="sec-head"><span class="label">What it sees</span><span id="radar-note" class="sec-note"></span></div>
+        <div class="sec-head"><span class="label">What it sees</span>
+          <span class="brain-legend" title="Its 5 view slices light up green as it sees food"><span><i class="dot food"></i>food</span><span><i class="dot bug"></i>bugs</span><span><i class="dot wall"></i>glass wall</span><span id="radar-note" class="dim"></span></span>
+        </div>
         <canvas id="radar" aria-label="Radar of the creature's 5 view slices"></canvas>
-        <div class="brain-legend">
-          <span><i class="dot food"></i>food</span><span><i class="dot bug"></i>bugs</span><span><i class="dot wall"></i>glass wall</span><span class="dim">slices light up as it sees food</span>
-        </div>
       </section>
 
-      <section class="insp-sec">
+      <section class="insp-sec" id="insp-genes-sec">
         <div class="sec-head"><span class="label">Genes</span><span class="sec-note"><i class="avg-tick"></i>average of all living bugs</span></div>
         <div id="insp-genes" class="genes"></div>
       </section>
@@ -97,6 +96,7 @@
         <div id="insp-family" class="family"></div>
       </section>
     </div>
+    <button id="insp-more" class="more-cue hidden" title="Scroll down to genes, life and family">&#9662; genes, life and family</button>
   </aside>
 
   <!-- Bottom drawer: charts and the lab log. -->

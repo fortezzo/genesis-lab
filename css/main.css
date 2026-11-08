@@ -302,14 +302,31 @@ kbd {
   border: 1px solid rgba(255, 176, 32, 0.3); border-radius: 10px;
 }
 .insp-death.hidden { display: none; }
-.insp-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 16px 16px; scrollbar-width: thin; scrollbar-color: rgba(140,200,255,0.2) transparent; }
-.insp-sec { margin-top: 16px; }
-.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.insp-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 16px 16px;
+  scroll-behavior: smooth; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: rgba(140,200,255,0.2) transparent;
+}
+/* More below (genes, life, family): the bottom edge fades and a small button scrolls there smoothly. */
+#inspector.more .insp-scroll { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent); }
+.more-cue {
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+  font: 500 11px var(--font-text); padding: 4px 11px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  color: var(--cyan); background: rgba(8, 17, 38, 0.92); border: 1px solid rgba(34, 229, 255, 0.35);
+  transition: opacity 0.2s;
+}
+.more-cue:hover { background: rgba(20, 40, 70, 0.95); }
+.more-cue.hidden { opacity: 0; pointer-events: none; }
+.insp-sec { margin-top: 12px; }
+.sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; min-height: 16px; }
 .sec-note { font-size: 10.5px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.vitals { display: grid; gap: 7px; margin-top: 12px; }
-.vital { display: grid; grid-template-columns: 52px 1fr 56px; align-items: center; gap: 10px; }
-.vital .label { font-size: 9.5px; }
+/* Energy, health and diet side by side on one row, to leave room for the brain. */
+.vitals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 10px; }
+.vital { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "l v" "b b"; align-items: center; gap: 4px 6px; min-width: 0; }
+.vital .label { font-size: 9.5px; grid-area: l; }
+.vital .bar { grid-area: b; }
+.vital .num { grid-area: v; }
 .num { font: 11px var(--font-num); color: var(--text); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bar { position: relative; height: 6px; border-radius: 3px; background: rgba(140, 200, 255, 0.10); overflow: hidden; }
 .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transform-origin: left center; border-radius: 3px; transition: transform 0.25s; }
@@ -324,9 +341,11 @@ kbd {
 
 /* Brain viewer */
 .brain-wrap { position: relative; }
-#brain { display: block; width: 100%; height: 420px; cursor: crosshair; }
-#radar { display: block; width: 100%; height: 178px; }
-.brain-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 10.5px; color: var(--text-dim); margin-top: 6px; }
+/* Both shrink with the screen height, so the brain and the radar fit together without scrolling
+   (420 + 180 px on tall screens; about 338 + 140 px on a 1366 x 768 laptop). */
+#brain { display: block; width: 100%; height: clamp(300px, calc(100vh - 430px), 420px); cursor: crosshair; }
+#radar { display: block; width: 100%; height: clamp(130px, calc(100vh - 628px), 180px); }
+.brain-legend { display: flex; flex-wrap: nowrap; gap: 4px 11px; font-size: 10px; color: var(--text-dim); white-space: nowrap; overflow: hidden; }
 .brain-legend .dim { margin-left: auto; opacity: 0.8; }
 .lg { display: inline-block; width: 16px; height: 2px; border-radius: 1px; vertical-align: 3px; margin-right: 5px; }
 .lg.exc { background: var(--cyan); box-shadow: 0 0 5px var(--cyan); }

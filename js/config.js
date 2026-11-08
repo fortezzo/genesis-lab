@@ -327,6 +327,7 @@ GL.Config = {
     skillChartFromSec: 30,   // the foraging-skill chart starts here: before that, too few hungry moments to measure
     toastSeconds: 6,         // a new lab log line shows briefly near the bottom when the drawer is closed
     hintSeconds: 14,         // the first-time hint fades after this many seconds
+    brainTipSeconds: 40,     // if nobody has clicked a bug after this many seconds, a one-time tip suggests it
 
     // Brain viewer (the showpiece).
     brainSmoothing: 14,      // how quickly the drawn neuron activity follows the real activity (per second),
