@@ -23,6 +23,8 @@ GL.World = (function () {
     this.nextId = 1;
     this.sproutGrowthMultiplier = 1;     // god mode will change this (Session 3)
     this.floorTimer = 0;
+    this.watchId = 0;                    // the creature the viewer is following (set by the interface)
+    this.watchDeath = null;              // filled in if that creature dies: what happened, where and when
 
     this.events = new GL.Events(4096);
     this.stats = new GL.Stats();
@@ -41,6 +43,7 @@ GL.World = (function () {
     this.creatureGrid = new GL.SpatialGrid(half, C.gridCellSize, poolSize);
     this.foodGrid = new GL.SpatialGrid(half, C.gridCellSize, foodCap);
     this.queryBuf = new Int32Array(Math.max(foodCap, poolSize));
+    this.readyBuf = new Int32Array(poolSize);   // scratch list of creatures ready to have a baby
 
     // Heat lamps: each circles the terrarium at its own pace, wanders in and out, and waxes and wanes.
     this.lamps = [];
@@ -134,6 +137,7 @@ GL.World = (function () {
       GL.Genome.inherit(rng, p.genes, p.brain, c.genes, c.brain);
       c.generation = p.generation + 1;
       c.parentId = p.id;
+      c.ancestors[0] = p.id; c.ancestors[1] = p.ancestors[0]; c.ancestors[2] = p.ancestors[1];
       c.age = 0;
       c.applyGenes();
       // Born just behind the parent.
@@ -163,7 +167,13 @@ GL.World = (function () {
       var list = this.creatures, c = list[index];
       c.alive = false;
       c.deathCause = cause;
-      this.stats.onDeath(cause);
+      this.stats.onDeath(cause, c);
+      if (c.id === this.watchId) {           // the followed creature died: keep a record for the interface
+        this.watchDeath = { id: c.id, cause: cause, age: c.age, x: c.x, y: c.y, hue: c.hue, radius: c.radius,
+                            generation: c.generation, babies: c.babies, foodEaten: c.foodEaten, time: this.time,
+                            parentId: c.parentId, ancestors: [c.ancestors[0], c.ancestors[1], c.ancestors[2]] };
+        this.watchId = 0;
+      }
       this.events.push(E.DEATH, c.x, c.y, c.hue, c.radius, c.id);
       var last = list.pop();
       if (index < list.length) list[index] = last;
@@ -199,10 +209,27 @@ GL.World = (function () {
       }
       n = list.length;
       if (n > 0) {
-        var start = this.tick % n, threshold = C.reproduceThreshold;
-        for (var k = 0; k < n && list.length < this.cap; k++) {
+        var start = this.tick % n, threshold = C.reproduceThreshold, ready = this.readyBuf, nReady = 0;
+        for (var k = 0; k < n; k++) {
           c = list[(start + k) % n];
-          if (c.wantsBaby && c.cooldown <= 0 && c.age >= C.maturityAge && c.energy > threshold * c.maxEnergy) this.spawnBaby(c);
+          if (c.wantsBaby && c.cooldown <= 0 && c.age >= C.maturityAge && c.energy > threshold * c.maxEnergy) ready[nReady++] = (start + k) % n;
+        }
+        var room = this.cap - n;
+        if (nReady <= room || !C.capBestFed) {
+          for (k = 0; k < nReady && list.length < this.cap; k++) this.spawnBaby(list[ready[k]]);
+        } else {
+          // Not enough room for everyone: the best-fed ready creatures get the free places.
+          for (var slot = 0; slot < room; slot++) {
+            var best = -1, bestFed = -1;
+            for (k = 0; k < nReady; k++) {
+              if (ready[k] < 0) continue;
+              var fed = list[ready[k]].energy / list[ready[k]].maxEnergy;
+              if (fed > bestFed) { bestFed = fed; best = k; }
+            }
+            if (best < 0) break;
+            this.spawnBaby(list[ready[best]]);
+            ready[best] = -1;
+          }
         }
       }
       // Population floor: below it, primitive creatures wander in.

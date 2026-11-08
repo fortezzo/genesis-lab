@@ -4,18 +4,21 @@
 // Units: distances are "units" (1 unit = 0.1 mm on the scale bar, so the
 // terrarium is 40 cm across), times are simulated seconds unless a comment says otherwise.
 //
-// Balance notes (found with tools/headless.html). The foraging test compares
-// minute 1 with minute 10, so minute 1 must measure random brains fairly:
-//  - A sparse start (sproutStart) and slow primitive walkers: random brains must really find food.
+// Balance notes (found with tools/headless.html and 20-world sweeps; see PLAN.md section 10).
+// The foraging test compares minute 1 with minute 10, so minute 1 must measure random brains fairly:
+//  - Foraging skill is "times faster than luck" (see js/sim/stats.js), so crowding and food
+//    shortages don't drag it down after the population boom.
 //  - thrustDeadZone: a random brain often rests instead of bumping into food by luck.
 //  - Primitives arrive with a full tank (startEnergy) but must settle (primitiveSettleTime)
 //    before breeding, so minute 1 isn't one lucky family multiplying.
-//  - reproduceCooldown: without it, parents churn out doomed babies and most creatures live ~20 s.
-//  - More sprouts are not better: above sproutGrowthRate ~26, random walkers find food by luck
-//    and the improvement shrinks.
+//  - reproduceCooldown: without it, parents churn out doomed babies.
 //  - Terrarium switch: the air is still (no currents) and bugs walk, so they stop quickly
-//    (walkBraking) and never slide sideways (legGrip). Nothing drifts a newcomer into food any
-//    more, so primitives now arrive with a completely full tank (startEnergy 1.0).
+//    (walkBraking) and never slide sideways (legGrip).
+//  - Terrarium feedback round (lifespan, steering, early game):
+//    foodSenseGain makes steering evolve (mutation alone could hardly find it);
+//    energyPerSize2, reproduceThreshold, eatOnlyWithRoom and sproutGrowthRate keep adults alive
+//    long enough to follow; startCreatures keeps the start lively; turnCost discourages endless
+//    circling; capBestFed keeps evolution going once the terrarium is full.
 var GL = GL || {};
 
 GL.Config = {
@@ -29,6 +32,8 @@ GL.Config = {
   // ------------------------------------------------------------- terrarium
   terrariumRadius: 2000,     // the terrarium floor is a circle this big (4,000 units = 40 cm across)
   wallEnergyCost: 3.0,       // extra energy per second burned while pressed against the glass wall
+  eatOnlyWithRoom: true,     // a bug only eats a sprout it has room for. Nearly full bugs used to graze and waste
+                             // most of each sprout, stripping the terrarium; this roughly halved unfed babies
   mmPerUnit: 0.1,            // scale bar: one unit is this many millimetres
   // There are no currents: the air is still, food stays where it grows and creatures only walk.
 
@@ -45,18 +50,21 @@ GL.Config = {
   // --------------------------------------------------------------- sprouts
   sproutMax: 1500,           // most sprouts in the terrarium at once
   sproutStart: 60,           // sprouts when a world begins (a sparse start, so random brains are put to the test)
-  sproutGrowthRate: 26,      // new sprouts per second when the terrarium is bare; slows as it fills up
+  sproutGrowthRate: 34,      // new sprouts per second when the terrarium is bare; slows as it fills up
+                             // (was 26: more food keeps adults alive; above ~37, steering evolves less reliably)
   sproutOpenGroundChance: 0.2, // share of new sprouts that come up on open soil instead of under a lamp
   sproutEnergy: 25,          // energy in one sprout
   sproutRadius: 4,           // size of a sprout, for eating
   sproutMaxAge: 120,         // a sprout withers after this many seconds if nobody eats it
 
   // ------------------------------------------------------------ population
-  startCreatures: 60,        // random creatures in a new world
+  startCreatures: 90,        // random creatures in a new world (was 60: the start dipped to ~20 bugs in many worlds)
   populationFloor: 20,       // below this many creatures, new primitive ones wander in
   floorSpawnInterval: 0.25,  // seconds between newcomers while below the floor
   capLaptop: 400,            // most creatures alive at once on a laptop or desktop
   capPhone: 150,             // most creatures alive at once on a phone
+  capBestFed: true,          // when the terrarium is full, each free place goes to the best-fed creature that
+                             // wants a baby, so good foragers still win once the population stops growing
 
   // ----------------------------------------------------------------- genes
   // min/max = the full range evolution can reach.
@@ -88,26 +96,35 @@ GL.Config = {
   brainResetChance: 0.005,   // ...but this often it becomes a fresh random value
 
   // ---------------------------------------------------------------- energy
-  energyPerSize2: 1.0,       // max energy = this x size squared (size 10 holds 100 energy)
+  energyPerSize2: 1.6,       // max energy = this x size squared (size 10 holds 160 energy, about 90 s of life).
+                             // Was 1.0: a bigger tank rides out gaps between meals, so adults live longer
   upkeepPerSize2: 0.008,     // energy per second just to stay alive, x size squared
   walkCost: 0.000017,        // energy per second for walking, x speed squared x size
   eyeCost: 0.0005,           // energy per second for eyes, x sight range x field of view (radians)
   thinkCost: 0.3,            // energy per second for running the brain
-  turnCost: 0.03,            // energy per second for turning at full turn rate
+  turnCost: 0.3,             // energy per second for turning at full turn rate (was 0.03: legs work harder to
+                             // turn, so walking in endless circles costs something and steering pays)
   startEnergy: 1.0,          // primitive creatures start with this share of their max energy. A full tank:
                              // in still air nothing drifts them into food, so they need fuel to walk to a
                              // feeding ground (0.9 in the ocean version; 1.0 halved early population crashes)
   primitiveSettleTime: 30,   // primitive creatures must wait this many seconds after arriving before having a baby
   primitiveAgeSpread: 20,    // primitive creatures arrive fully grown, with ages spread over this many extra seconds
   sizeSenseScale: 1.5,       // how sharply a creature senses size differences (higher = small differences feel bigger)
+  foodSenseGain: 8,          // how strongly the food senses speak to the brain (food inputs run from 0 to this).
+                             // At 1, a newborn brain barely reacts to food and mutation needed dozens of lucky
+                             // steps to build steering. At 8, random brains already react strongly (half turn
+                             // toward food, half away) and evolution only has to pick the right half
 
   // ------------------------------------------------------------ body and legs
   refSize: 10,               // the "normal" body size used by the size penalties below
-  sizeSpeedPenalty: 0.35,    // bigger bodies are slower: top speed x (refSize / size) ^ this
+  sizeSpeedPenalty: 0,       // bigger bodies are slower: top speed x (refSize / size) ^ this. 0 for walkers:
+                             // longer legs make up for a heavier body (the old swimmers used 0.35)
   walkAcceleration: 5,       // how quickly a bug speeds up to the walking speed it wants (per second)
   walkBraking: 14,           // how quickly it slows down when it walks slower or stops (per second): legs stop
                              // a bug in about a fifth of a second, where the old swimmers glided on
   legGrip: 14,               // how quickly legs cancel any sideways slide (per second), so turns don't skid
+  turnResponse: 10,          // how quickly the actual turn rate follows the brain's turn command (per second).
+                             // Legs can't reverse a turn instantly, so bugs swing smoothly instead of twitching
   thrustDeadZone: 0.3,       // the brain's thrust output (-1..1) must pass this to walk at all; -1 = always some thrust
   healthPerSize2: 1.0,       // max health = this x size squared
   healRate: 0.02,            // share of max health regrown per second
@@ -121,13 +138,16 @@ GL.Config = {
   maturityAge: 10,           // a creature must be this many seconds old to have a baby
   growTime: 10,              // seconds for a baby to grow from half size to full size
   babyStartScale: 0.5,       // babies are born at this share of their full size
-  reproduceThreshold: 0.6,   // a creature needs more than this share of max energy to have a baby
+  reproduceThreshold: 0.85,  // a creature needs more than this share of max energy to have a baby (was 0.6:
+                             // parents now keep a reserve after giving birth, and babies start better fed)
   birthCost: 0.10,           // the parent also loses this share of its energy as the cost of birth
   reproduceCooldown: 20,     // after having a baby, a parent must wait this many seconds before the next one
 
   // ----------------------------------------------------------------- stats
   statsIntervalTicks: 30,    // sample statistics every this many ticks (half a simulated second)
   skillWindowSec: 60,        // foraging skill is measured over the last this many seconds
+  steerConeDeg: 20,          // steering measure: a bug counts as pointed at the food it sees within this many degrees
+  steerMinSpeed: 0.2,        // ...and as walking above this share of its top speed
   statsHistoryMax: 7200,     // samples kept for charts (1 hour at 2 per second)
 
   // ------------------------------------------------------------ spatial grid
@@ -175,6 +195,8 @@ GL.Config = {
     creatureGlowAlpha: 0.8,  // bug glow brightness
     creatureGlowMinPx: 12,   // a bug's glow is never smaller than this on screen, so even babies read from afar
     creatureDotPx: 3.8,      // a bug too small to draw in detail becomes a white-hot dot this many pixels wide
+    creatureMinBodyPx: 2.6,  // zoomed out, a bug's body is drawn with at least this radius on screen (pixels),
+                             // so small evolved bugs still read as little glowing ovals, not dots
     legDetailPx: 2.6,        // legs start to fade in once a bug's body radius is this many pixels on screen...
     legFullPx: 7,            // ...and are fully drawn from this size (so small bugs read as ovals, not spiky stars)
     detailPx: 3.5,           // eyes and antennae are drawn once a bug's body radius is this many pixels on screen
@@ -203,6 +225,11 @@ GL.Config = {
     // The terrarium: soil, moss, glass and grid.
     soilTexturePx: 1280,     // the soil and moss are painted once into a texture this many pixels across
     mossCover: 0.3,          // roughly the share of the floor covered by moss patches
+    soilFarTexturePx: 512,   // the softer whole-terrarium floor is painted at this size
+    softMossEdge: 0.16,      // whole-terrarium view: how blurry the moss edges are (detailed floor: 0.07)
+    softMossBlend: 0.5,      // ...and how strongly moss shows over the soil (detailed floor: 0.9)
+    softMossZoomFull: 0.26,  // the soft floor is used fully when zoomed out beyond this (pixels per unit)...
+    softMossZoomEnd: 0.5,    // ...and has faded into the detailed floor by this zoom
     grainTileUnits: 110,     // fine soil grain (seen when zoomed in) repeats every this many units
     grainAlpha: 0.75,        // strength of the fine soil grain
     grainZoomStart: 0.3,     // the fine grain starts to fade in at this zoom (pixels per unit)...
@@ -240,6 +267,13 @@ GL.Config = {
     maxParticles: 1600,      // the particle pool never grows past this
     lowFpsThreshold: 45,     // if the frame rate stays under this...
     lowFpsSeconds: 3,        // ...for this many seconds, footprints, particles and motes scale down
+    qualityWarmupSeconds: 5, // the first seconds after loading are ignored (loading is always a little slow)
+    qualityRecoverFps: 50,   // quality goes back up once the frame rate holds at or above this...
+    qualityRecoverSeconds: 4, // ...for this many seconds (was 10 s above 57, so a laptop at 52-54 fps stayed on low)
+    qualityBackoffMax: 60,   // if going back up makes it slow again at once, wait longer each time, up to this
+    followNextSeconds: 6,    // when the followed bug dies, switch to its child or nearest relative after this
+                             // many real seconds (unless the viewer chooses first)
+    deathMarkSeconds: 10,    // the marker where the followed bug died fades out over this many seconds
     scaleBarPx: 120          // the scale bar aims to be about this many pixels long
   }
 };

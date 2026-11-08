@@ -14,7 +14,8 @@ GL.Background = function () {
   this.prevX = null; this.prevY = null;
   this.time = 0;
   this.vignette = null; this.vigW = 0; this.vigH = 0;
-  this.soil = null; this.soilSeed = -1;     // the painted floor texture, made for each world's seed
+  this.soil = null; this.soilSeed = -1;     // the painted floor texture, made for each world's seed...
+  this.soilFar = null;                      // ...and a softer, darker version for the whole-terrarium view
   this.grain = null; this.grainPattern = null; this.grainMatrix = null;
 };
 
@@ -96,7 +97,11 @@ GL.Background.prototype = {
   // World-space layers under the creatures (the context is already in world units).
   drawFloor: function (ctx, cam, world, quality, reducedMotion) {
     var C = GL.Config, R = C.terrariumRadius, RC = C.render, M = GL.M, z = cam.zoom, T = RC.glassThickness;
-    if (this.soilSeed !== world.seed) { this.soil = this.buildSoil(world.seed); this.soilSeed = world.seed; }
+    if (this.soilSeed !== world.seed) {
+      this.soil = this.buildSoil(world.seed, RC.soilTexturePx, false);
+      this.soilFar = this.buildSoil(world.seed, RC.soilFarTexturePx, true);
+      this.soilSeed = world.seed;
+    }
 
     // The terrarium's soft shadow on the bench.
     var sh = ctx.createRadialGradient(0, 0, R + T * 0.6, 0, 0, R + T + 300);
@@ -111,6 +116,14 @@ GL.Background.prototype = {
     // Soil and moss.
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.soil, -R, -R, R * 2, R * 2);
+    // Zoomed out, the moss softens and darkens so it doesn't look like camouflage and the bugs stand out.
+    // It blends into the detailed floor as you zoom in; medium and close-up views use the detailed floor.
+    var far = 1 - M.smoothstep(RC.softMossZoomFull, RC.softMossZoomEnd, z);
+    if (far > 0.01) {
+      ctx.globalAlpha = far;
+      ctx.drawImage(this.soilFar, -R, -R, R * 2, R * 2);
+      ctx.globalAlpha = 1;
+    }
 
     // Fine soil grain, fading in as you zoom closer.
     var grainA = RC.grainAlpha * M.smoothstep(RC.grainZoomStart, RC.grainZoomFull, z);
@@ -280,9 +293,10 @@ GL.Background.prototype = {
   // ------------------------------------------------- painting the soil once
   // Dark soil with patches of moss, all tinted toward the navy palette. Each world
   // seed gets its own layout. Uses its own random numbers, never the simulation's.
-  buildSoil: function (seed) {
+  // soft = the whole-terrarium version: blurrier, darker, lower-contrast moss and no fine speckle.
+  buildSoil: function (seed, size, soft) {
     var C = GL.Config, R = C.terrariumRadius, RC = C.render, col = C.colors, M = GL.M;
-    var S = RC.soilTexturePx;
+    var S = size, grit = soft ? 0 : 1, mossEdge = soft ? RC.softMossEdge : 0.07, mossBlend = soft ? RC.softMossBlend : 0.9;
     var noise = new GL.Noise(new GL.RNG((seed ^ 0x50111) >>> 0));
     var hseed = (seed * 2654435761) | 0;
 
@@ -340,16 +354,16 @@ GL.Background.prototype = {
         var b = sample(big, N1, x, y), m = sample(mid, N2, x, y);
         var h1 = hash(px, py, 1), h2 = hash(px, py, 2), h3 = hash(px, py, 3);
         // Soil: clumps from the medium noise, plus a little per-pixel grit.
-        var tone = M.clamp(0.5 + m * 0.9 + (h1 - 0.5) * 0.16, 0, 1);
+        var tone = M.clamp(0.5 + m * 0.9 + (h1 - 0.5) * 0.16 * grit, 0, 1);
         if (m < -0.24) tone *= 0.78;                                 // cracks between clumps
-        var moss = M.smoothstep(thr - 0.05, thr + 0.09, b + 0.4 * m + (h2 - 0.5) * 0.04);
+        var moss = M.smoothstep(thr - mossEdge, thr + mossEdge + 0.02, b + 0.4 * m + (h2 - 0.5) * 0.04 * grit);
         // Moss: speckled cushions, a touch brighter on their edges and tops.
-        var mt = M.clamp(0.38 + h2 * 0.24 + m * 1.1 + moss * (1 - moss) * 1.0, 0, 1);
+        var mt = soft ? M.clamp(0.3 + m * 0.5, 0, 1) : M.clamp(0.38 + h2 * 0.24 + m * 1.1 + moss * (1 - moss) * 1.0, 0, 1);
         for (var k = 0; k < 3; k++) {
           var sc = tri(soilD, soilM, soilL, tone, k), mc = tri(mossD, mossM, mossL, mt, k);
-          var v = sc + (mc - sc) * moss * 0.9;
-          if (h3 > 0.9965) v = v * 1.5 + 14;                          // a tiny pebble catching the light
-          else if (h3 < 0.03) v *= 0.72;                                // a dark crumb
+          var v = sc + (mc - sc) * moss * mossBlend;
+          if (grit && h3 > 0.9965) v = v * 1.5 + 14;                  // a tiny pebble catching the light
+          else if (grit && h3 < 0.03) v *= 0.72;                        // a dark crumb
           d[o + k] = v;
         }
         d[o + 3] = 255;

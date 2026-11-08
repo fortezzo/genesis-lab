@@ -20,6 +20,11 @@ GL.Renderer = function (canvas, world) {
   this.reducedMotion = false;     // Session 4 adds the setting
   this.quality = { level: 2, footprints: 1, particles: 1, motes: 1, shimmer: true };
   this.lowFpsTime = 0; this.highFpsTime = 0;
+  this.qualityClock = 0;          // real seconds the quality governor has been running
+  this.lastDrop = -999;           // when quality last dropped...
+  this.lastRaise = -999;          // ...and last went back up
+  this.recoverWait = GL.Config.render.qualityRecoverSeconds;
+  this.deathMark = null;          // where the followed bug died: { x, y, hue, radius, t }
   this.view = { x0: 0, y0: 0, x1: 0, y1: 0 };
   this.wt = [1, 0, 0, 1, 0, 0];   // the world-space transform for this frame
   this.resize(true);
@@ -62,8 +67,12 @@ GL.Renderer.prototype = {
 
   select: function (c) {
     this.selected = c; this.selectedId = c ? c.id : 0;
-    if (c) this.camera.startFollowing(c); else this.camera.stopFollowing();
+    this.world.watchId = c ? c.id : 0;      // the simulation keeps a record if this bug dies
+    if (c) { this.camera.startFollowing(c); this.clearDeathMark(); } else this.camera.stopFollowing();
   },
+  // A small fading marker where the followed bug died.
+  markDeath: function (rec) { this.deathMark = { x: rec.x, y: rec.y, hue: rec.hue, radius: rec.radius, t: this.time }; },
+  clearDeathMark: function () { this.deathMark = null; },
   // The selected creature, if it is still alive.
   getSelected: function () {
     var c = this.selected;
@@ -84,13 +93,22 @@ GL.Renderer.prototype = {
   },
 
   // Lower the drawing load when the frame rate stays low; raise it again when there is room.
+  // The first seconds are ignored (loading is always a little slow). Quality comes back once the
+  // frame rate holds a comfortable level for a few seconds, so a laptop running at 50-55 fps
+  // recovers. If raising it makes things slow again straight away, the next try waits longer.
   adaptQuality: function (fps, dt) {
-    var R = GL.Config.render, q = this.quality;
-    if (fps < R.lowFpsThreshold) { this.lowFpsTime += dt; this.highFpsTime = 0; }
-    else if (fps > 57) { this.highFpsTime += dt; this.lowFpsTime = 0; }
+    var R = GL.Config.render, q = this.quality, now = (this.qualityClock += dt);
+    if (now < R.qualityWarmupSeconds) { this.lowFpsTime = 0; this.highFpsTime = 0; }
+    else if (fps < R.lowFpsThreshold) { this.lowFpsTime += dt; this.highFpsTime = 0; }
+    else if (fps >= R.qualityRecoverFps) { this.highFpsTime += dt; this.lowFpsTime = 0; }
     else { this.lowFpsTime = 0; this.highFpsTime = 0; }
-    if (this.lowFpsTime > R.lowFpsSeconds && q.level > 0) { q.level--; this.lowFpsTime = 0; }
-    if (this.highFpsTime > 10 && q.level < 2) { q.level++; this.highFpsTime = 0; }
+    if (this.lowFpsTime > R.lowFpsSeconds && q.level > 0) {
+      q.level--; this.lowFpsTime = 0;
+      // Dropped again right after going back up: wait twice as long before the next try.
+      this.recoverWait = now - this.lastRaise < 10 ? Math.min(R.qualityBackoffMax, this.recoverWait * 2) : R.qualityRecoverSeconds;
+      this.lastDrop = now;
+    }
+    if (this.highFpsTime > this.recoverWait && q.level < 2) { q.level++; this.highFpsTime = 0; this.lastRaise = now; }
     q.footprints = [0, 0.5, 1][q.level];
     q.particles = [0.3, 0.6, 1][q.level];
     q.motes = [0.4, 0.7, 1][q.level];
@@ -138,6 +156,7 @@ GL.Renderer.prototype = {
     this.effects.draw(ctx, cam);
     var sel = this.getSelected();
     if (sel) this.drawSelection(ctx, cam, sel);
+    if (this.deathMark) this.drawDeathMark(ctx, cam);
     this.background.drawGlass(ctx, cam);
 
     // Screen space again.
@@ -272,7 +291,8 @@ GL.Renderer.prototype = {
     var detail = this._detail || (this._detail = []), legs = this._legs || (this._legs = []);
     var close = this._close || (this._close = []), dot = S.dot();
     detail.length = 0; legs.length = 0; close.length = 0;
-    var bodyMinPx = 2;                                             // below this body radius on screen, a bug is a bright dot
+    var dotBelowPx = 0.9;                                          // below this body radius on screen, a bug is a bright dot
+    var minBody = R.creatureMinBodyPx / z;                         // otherwise its body is drawn at least this big
     // Glows first (additive light), so bodies sit on top of the bloom.
     ctx.globalCompositeOperation = 'lighter';
     for (var i = 0; i < list.length; i++) {
@@ -283,7 +303,7 @@ GL.Renderer.prototype = {
       var g = Math.max(c.radius * R.creatureGlow * 2 * (1 + flash * 0.35), R.creatureGlowMinPx / z);
       ctx.globalAlpha = R.creatureGlowAlpha * fade * (0.85 + flash * 0.6);
       ctx.drawImage(S.glow(c.hue, 1, 0.58), c.x - g / 2, c.y - g / 2, g, g);
-      if (c.radius * z < bodyMinPx) {                              // tiny on screen: a white-hot point
+      if (c.radius * z < dotBelowPx && minBody <= 0) {             // tiny on screen: a white-hot point
         var d = R.creatureDotPx / z;
         ctx.globalAlpha = 0.95 * fade;
         ctx.drawImage(dot, c.x - d / 2, c.y - d / 2, d, d);
@@ -301,7 +321,10 @@ GL.Renderer.prototype = {
     var wt = this.wt, k0 = wt[0], scale = S.BODY_SIZE / S.BODY_R;
     for (i = 0; i < detail.length; i++) {
       c = detail[i];
-      var s = c.radius * scale, ch = Math.cos(c.heading), sh = Math.sin(c.heading);
+      // Zoomed out, small bugs are drawn a little bigger than life so they still read as bugs, not dots
+      // (babies a bit smaller than adults).
+      var grown = c.radius / c.fullRadius, shown = Math.max(c.radius, minBody * (0.7 + 0.3 * grown));
+      var s = shown * scale, ch = Math.cos(c.heading), sh = Math.sin(c.heading);
       ctx.setTransform(k0 * ch, k0 * sh, -k0 * sh, k0 * ch, wt[4] + k0 * c.x, wt[5] + k0 * c.y);
       ctx.globalAlpha = Math.min(1, (tick - c.bornTick) / 45);
       ctx.drawImage(S.bug(c.hue), -s / 2, -s / 2, s, s);
@@ -410,6 +433,23 @@ GL.Renderer.prototype = {
     }
     ctx.fillStyle = 'rgba(225, 245, 255, 0.95)'; ctx.fill(whites);
     ctx.fillStyle = '#050B18'; ctx.fill(pupils);
+  },
+
+  // Where the followed bug died: a soft ring and a small cross that fade out.
+  drawDeathMark: function (ctx, cam) {
+    var m = this.deathMark, R = GL.Config.render, age = this.time - m.t;
+    if (age > R.deathMarkSeconds) { this.deathMark = null; return; }
+    var z = cam.zoom, a = 1 - age / R.deathMarkSeconds, r = Math.max(m.radius * 2.2, 16 / z);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'hsla(' + Math.round(m.hue) + ', 60%, 70%,' + (0.55 * a) + ')';
+    ctx.lineWidth = 1.5 / z;
+    ctx.setLineDash([4 / z, 4 / z]);
+    ctx.beginPath(); ctx.arc(m.x, m.y, r * (1 + 0.15 * Math.sin(age * 3)), 0, GL.M.TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    var k = r * 0.35;
+    ctx.strokeStyle = 'rgba(230, 240, 255,' + (0.6 * a) + ')';
+    ctx.beginPath(); ctx.moveTo(m.x - k, m.y - k); ctx.lineTo(m.x + k, m.y + k); ctx.moveTo(m.x + k, m.y - k); ctx.lineTo(m.x - k, m.y + k); ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
   },
 
   drawSelection: function (ctx, cam, c) {

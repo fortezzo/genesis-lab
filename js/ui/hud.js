@@ -1,7 +1,7 @@
 // Genesis Lab - interface: heads-up display.
 // The top bar (generation, population, foraging skill, speed buttons), the
-// "following" chip for the selected creature, the scale bar in millimetres,
-// a first-time hint and the debug overlay (backtick key).
+// "following" chip for the selected creature (and what happened if it dies),
+// the scale bar in millimetres, a first-time hint and the debug overlay (backtick key).
 var GL = GL || {};
 
 GL.HUD = function (app) {
@@ -10,14 +10,20 @@ GL.HUD = function (app) {
   this.el = {
     gen: $('stat-gen'), pop: $('stat-pop'), skill: $('stat-skill'), trend: $('stat-trend'),
     speeds: $('speeds'), chip: $('selection'), chipName: $('sel-name'), chipMeta: $('sel-meta'),
-    chipEnergy: $('sel-energy'), chipClose: $('sel-close'),
+    chipEnergy: $('sel-energy'), chipClose: $('sel-close'), chipActions: $('sel-actions'),
+    chipFollow: $('sel-follow'), chipStay: $('sel-stay'), topbar: $('topbar'),
     scaleBar: $('scale-line'), scaleLabel: $('scale-label'), debug: $('debug'), hint: $('hint')
   };
   this.textTimer = 0;
   this.lastScaleZoom = 0;
+  this.death = null;           // when the followed bug dies: { record, next, label, until }
   this.buildSpeedButtons();
   var self = this;
-  this.el.chipClose.addEventListener('click', function () { app.renderer.select(null); self.update(0, true); });
+  this.el.chipClose.addEventListener('click', function () { self.dismissDeath(); app.renderer.select(null); self.update(0, true); });
+  this.el.chipStay.addEventListener('click', function () { self.dismissDeath(); self.update(0, true); });
+  this.el.chipFollow.addEventListener('click', function () { self.followNext(); });
+  window.addEventListener('resize', function () { self.placeChip(); });
+  this.placeChip();
   setTimeout(function () { self.hideHint(); }, 14000);
 };
 
@@ -59,6 +65,12 @@ GL.HUD.prototype = {
 
   hideHint: function () { if (this.el.hint) this.el.hint.classList.add('gone'); },
 
+  // Keep the chip just under the top bar, however tall the bar is (it wraps on narrow screens).
+  placeChip: function () {
+    var r = this.el.topbar.getBoundingClientRect();
+    if (r.height > 0) this.el.chip.style.top = Math.round(r.bottom + 8) + 'px';
+  },
+
   update: function (dt, force) {
     this.updateScaleBar();
     var loop = this.app.loop;
@@ -70,35 +82,125 @@ GL.HUD.prototype = {
     if (this.textTimer > 0 && !force) return;
     this.textTimer = 0.25;                     // text refreshes 4 times a second
     var app = this.app, world = app.world, s = world.stats;
-    this.el.gen.textContent = s.maxGeneration;
+    this.el.gen.textContent = s.maxGenerationEver;   // the highest generation ever reached: it never goes down
     this.el.pop.textContent = world.creatures.length;
     this.el.skill.textContent = s.skill.toFixed(1);
     if (s.startSkill > 0) {
-      var ratio = s.skill / s.startSkill;
-      this.el.trend.textContent = (ratio >= 1 ? '▲ ' : '▼ ') + ratio.toFixed(1) + '×';
-      this.el.trend.className = 'trend ' + (ratio >= 1 ? 'up' : 'down');
-      this.el.trend.title = 'Compared with the first minute (' + s.startSkill.toFixed(2) + ' food per creature per minute)';
+      var up = s.skill >= s.startSkill;
+      this.el.trend.textContent = (up ? '▲' : '▼') + ' from ' + s.startSkill.toFixed(1) + '×';
+      this.el.trend.className = 'trend ' + (up ? 'up' : 'down');
+      this.el.trend.title = 'In the first minute, the random first bugs found food ' + s.startSkill.toFixed(1) +
+        ' times faster than luck. Now it is ' + s.skill.toFixed(1) + ' times (' + (s.skill / s.startSkill).toFixed(1) + 'x better).';
     } else {
       this.el.trend.textContent = 'measuring';
       this.el.trend.className = 'trend';
-      this.el.trend.title = 'The first minute is the baseline';
+      this.el.trend.title = 'The first minute is the baseline: brand-new random brains';
     }
     this.updateChip();
     if (app.renderer.debug) this.updateDebug();
   },
 
   updateChip: function () {
-    var c = this.app.renderer.getSelected(), el = this.el;
+    var app = this.app, r = app.renderer, w = app.world, el = this.el;
+    // The followed bug died: say what happened and offer to follow a relative.
+    if (w.watchDeath) { var rec = w.watchDeath; w.watchDeath = null; if (!r.getSelected()) this.showDeath(rec); }
+    var c = r.getSelected();
+    if (c && this.death) this.dismissDeath();            // the viewer picked another bug
+    if (this.death) { this.updateDeath(); return; }
+    el.chip.classList.remove('dead');
+    el.chipActions.classList.add('hidden');
+    el.chipEnergy.parentNode.classList.remove('hidden');
     if (!c) { el.chip.classList.add('hidden'); return; }
     el.chip.classList.remove('hidden');
     el.chip.style.setProperty('--hue', Math.round(c.hue));
     el.chipName.textContent = 'Specimen #' + c.id;
-    var age = Math.floor(c.age), mm = Math.floor(age / 60), ss = age % 60;
-    el.chipMeta.textContent = 'Gen ' + c.generation + ' · age ' + mm + ':' + (ss < 10 ? '0' : '') + ss +
+    el.chipMeta.textContent = 'Gen ' + c.generation + ' · age ' + this.clock(c.age) +
       ' · ate ' + c.foodEaten + ' · ' + c.babies + (c.babies === 1 ? ' baby' : ' babies');
     var e = Math.max(0, Math.min(1, c.energy / c.maxEnergy));
     el.chipEnergy.style.width = Math.round(e * 100) + '%';
     el.chipEnergy.parentNode.title = 'Energy ' + Math.round(e * 100) + '%';
+  },
+
+  clock: function (seconds) {
+    var t = Math.floor(seconds), mm = Math.floor(t / 60), ss = t % 60;
+    return mm + ':' + (ss < 10 ? '0' : '') + ss;
+  },
+
+  // ------------------------------------------------- when the followed bug dies
+  showDeath: function (rec) {
+    var how = { starvation: 'starved', oldAge: 'died of old age', eaten: 'was eaten', disaster: 'was lost in a disaster' }[rec.cause] || 'died';
+    this.death = { record: rec, until: performance.now() + GL.Config.render.followNextSeconds * 1000, next: null, label: '' };
+    this.app.renderer.markDeath(rec);
+    var el = this.el;
+    el.chip.classList.remove('hidden');
+    el.chip.classList.add('dead');
+    el.chip.style.setProperty('--hue', Math.round(rec.hue));
+    el.chipName.textContent = 'Specimen #' + rec.id + ' ' + how + ' at age ' + this.clock(rec.age);
+    el.chipMeta.textContent = 'Gen ' + rec.generation + ' · ate ' + rec.foodEaten + ' · ' + rec.babies +
+      (rec.babies === 1 ? ' baby' : ' babies');
+    el.chipEnergy.parentNode.classList.add('hidden');
+    el.chipActions.classList.remove('hidden');
+    this.updateDeath();
+  },
+
+  updateDeath: function () {
+    var d = this.death, el = this.el;
+    if (!d.next || !d.next.alive || d.next.id !== d.nextId) {         // (re)choose who to follow next
+      var pick = this.findRelative(d.record);
+      d.next = pick ? pick.c : null; d.nextId = pick ? pick.c.id : 0; d.label = pick ? pick.label : '';
+    }
+    var left = Math.ceil((d.until - performance.now()) / 1000);
+    if (d.next) {
+      el.chipFollow.classList.remove('hidden');
+      el.chipFollow.textContent = 'Follow ' + d.label + ' #' + d.next.id + (left > 0 ? ' (' + left + ')' : '');
+      el.chipFollow.title = 'Switches automatically when the countdown ends. Stay here to keep watching this spot.';
+      if (left <= 0) this.followNext();
+    } else {
+      el.chipFollow.classList.add('hidden');
+    }
+  },
+
+  followNext: function () {
+    var d = this.death;
+    if (!d) return;
+    var next = d.next && d.next.alive && d.next.id === d.nextId ? d.next : null;
+    this.dismissDeath();
+    if (next) this.app.renderer.select(next);
+    this.update(0, true);
+  },
+
+  dismissDeath: function () {
+    if (!this.death) return;
+    this.death = null;
+    this.app.renderer.clearDeathMark();
+  },
+
+  // The closest living relative of a creature that died: its child, then grandchild, sibling,
+  // parent, grandparent, cousin, any relative from the last few generations, and if there are
+  // none, the nearest bug. Among equal relatives, the one closest to where it died.
+  findRelative: function (rec) {
+    var list = this.app.world.creatures, a = rec.ancestors;
+    var kinds = [
+      ['its child', function (c) { return c.parentId === rec.id; }],
+      ['its grandchild', function (c) { return c.ancestors[1] === rec.id; }],
+      ['its sibling', function (c) { return rec.parentId > 0 && c.parentId === rec.parentId; }],
+      ['its parent', function (c) { return rec.parentId > 0 && c.id === rec.parentId; }],
+      ['its grandparent', function (c) { return a[1] > 0 && c.id === a[1]; }],
+      ['a cousin', function (c) { return a[1] > 0 && c.ancestors[1] === a[1]; }],
+      ['a relative', function (c) { return a[2] > 0 && (c.ancestors[2] === a[2] || c.ancestors[1] === a[2] || c.id === a[2]); }],
+      ['the nearest bug', function () { return true; }]
+    ];
+    for (var k = 0; k < kinds.length; k++) {
+      var test = kinds[k][1], best = null, bestD = Infinity;
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (!test(c)) continue;
+        var dx = c.x - rec.x, dy = c.y - rec.y, d2 = dx * dx + dy * dy;
+        if (d2 < bestD) { bestD = d2; best = c; }
+      }
+      if (best) return { c: best, label: kinds[k][0] };
+    }
+    return null;
   },
 
   // Scale bar: a round length in millimetres (1, 2, 5, 10, 20, 50 mm ...) about 120 pixels long.
@@ -131,6 +233,8 @@ GL.HUD.prototype = {
       'speed      ' + (loop.paused ? 'paused' : loop.effectiveSpeed.toFixed(1) + 'x actual') + '\n' +
       'creatures  ' + w.creatures.length + ' / ' + w.cap + '\n' +
       'sprouts    ' + w.food.sproutCount + '\n' +
+      'skill      ' + w.stats.skill.toFixed(2) + 'x luck, food ' + w.stats.foodRate.toFixed(2) + ' per bug per minute\n' +
+      'steering   ' + Math.round(w.stats.steer * 100) + '% (luck ' + Math.round(w.stats.steerLuck * 100) + '%)\n' +
       'grid cells ' + w.creatureGrid.usedCells() + ' creature, ' + w.foodGrid.usedCells() + ' food\n' +
       'sim time   ' + Math.floor(t / 60) + ':' + ((t % 60) < 10 ? '0' : '') + (t % 60) + '\n' +
       'seed       ' + w.seed + '\n' +

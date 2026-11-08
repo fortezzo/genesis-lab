@@ -48,6 +48,7 @@ GL.Controls = function (app) {
     canvas.classList.remove('grabbing');
     if (wasClick && e.type === 'pointerup') {
       var c = app.renderer.pick(e.clientX, e.clientY);
+      app.hud.dismissDeath();                    // any click answers the "it died" notice
       app.renderer.select(c);                    // empty soil = deselect
       app.hud.update(0, true);
     }
@@ -73,7 +74,7 @@ GL.Controls = function (app) {
     var loop = app.loop, speeds = GL.Config.speedOptions;
     if (e.code === 'Space') { e.preventDefault(); loop.togglePause(); app.hud.refreshSpeeds(); }
     else if (e.key >= '1' && e.key <= String(speeds.length)) { loop.setSpeed(speeds[Number(e.key) - 1]); app.hud.refreshSpeeds(); }
-    else if (e.key === 'Escape') { app.renderer.select(null); app.hud.update(0, true); }
+    else if (e.key === 'Escape') { app.hud.dismissDeath(); app.renderer.select(null); app.hud.update(0, true); }
     else if (e.key === '`' || e.code === 'Backquote') app.hud.toggleDebug();
     else return;
     interacted();

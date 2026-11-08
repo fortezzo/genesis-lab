@@ -62,7 +62,7 @@ Picture a glass terrarium on a lab bench, sped up a million times: nobody design
 **The life loop** (drawn as a diagram in the online doc):
 
 ```text
-Start: 60 random creatures
+Start: 90 random creatures
   -> 1 See:       5 view slices spot food, creatures and the glass wall
   -> 2 Think:     a neural network turns senses into decisions
   -> 3 Act:       walk, turn, bite, or try to have a baby
@@ -116,14 +116,15 @@ The terrarium is a 4,000-unit-wide circle of soil where sprouts grow under drift
 
 - **A sparse start:** a new world begins with only 60 sprouts (`sproutStart: 60`), so the first random creatures have to find food instead of bumping into it.
 - **Wide, thin feeding grounds:** sprouts grow in patches about 700 units wide around each lamp (`lampSpread: 700`), and 20% of new sprouts come up on open soil (`sproutOpenGroundChance: 0.2`).
-- Sprouts regrow at up to 26 per second when the terrarium is bare, slowing as it fills (`sproutGrowthRate: 26`). More is not better: a faster rate refills the terrarium during the first minute, random walkers find food by luck, and the learning curve flattens.
+- Sprouts regrow at up to 34 per second when the terrarium is bare, slowing as it fills (`sproutGrowthRate: 34`). This is a balance: more food keeps adults alive longer, but above about 37 per second there is so much food that steering toward it stops paying, and it evolves less reliably.
+- **No wasteful grazing:** a bug only eats a sprout it has room for (`eatOnlyWithRoom`). Nearly full bugs used to nibble every sprout they touched and waste most of it, stripping the terrarium; now they leave it for hungry bugs and babies.
 
 **Population limits**
 
-- Start: 60 random creatures.
+- Start: 90 random creatures (`startCreatures: 90`). With 60, the first minutes often looked empty: many worlds dipped to about 20 bugs.
 - Floor: below 20 creatures, new primitive creatures wander in, so the world never dies. The lab log records each arrival.
-- Settling in: every primitive creature (the 60 starters and each newcomer) arrives with a full tank (`startEnergy: 1.0`) but must wait 30 seconds before it can have a baby (`primitiveSettleTime: 30`). The wait keeps minute 1 a fair measure of random brains, instead of one lucky family multiplying. The full tank matters because the air is still: nothing drifts a newcomer into food, so it needs the fuel to walk to a feeding ground. (The ocean version used 90%; in the terrarium that caused twice as many early population crashes.)
-- Cap: 400 creatures on laptops and 150 on phones. At the cap, nobody can reproduce until there's room.
+- Settling in: every primitive creature (the 90 starters and each newcomer) arrives with a full tank (`startEnergy: 1.0`) but must wait 30 seconds before it can have a baby (`primitiveSettleTime: 30`). The wait keeps minute 1 a fair measure of random brains, instead of one lucky family multiplying. The full tank matters because the air is still: nothing drifts a newcomer into food, so it needs the fuel to walk to a feeding ground. (The ocean version used 90%; in the terrarium that caused twice as many early population crashes.)
+- Cap: 400 creatures on laptops and 150 on phones. At the cap, nobody can reproduce until there's room, and each free place goes to the best-fed creature that wants a baby (`capBestFed`). Without that rule, a free place went to whoever happened to come first, and evolution stalled once the terrarium was full.
 
 ## 5. The creatures
 
@@ -133,7 +134,7 @@ Each creature is a little glowing bug: 9 body genes plus a 390-number brain. Eve
 
 | Gene | Range | Helps with | Costs |
 | --- | --- | --- | --- |
-| Size (radius) | 6–24 units | Stores more energy, wins fights | Slower, and burns more energy every second |
+| Size (radius) | 6–24 units | Stores more energy, wins fights | Burns more energy every second, and needs more food to breed |
 | Top speed | 30–150 units/sec | Reaching food first, escaping | Fast walking burns energy fast |
 | Turn speed | 1–6 radians/sec | Dodging and chasing | A small energy cost |
 | Sight range | 60–320 units | Spotting food and danger early | Bigger eyes cost energy |
@@ -149,7 +150,7 @@ Each creature is a little glowing bug: 9 body genes plus a 390-number brain. Eve
 
 | Input | Count | Meaning |
 | --- | --- | --- |
-| Food per view slice | 5 | How close the nearest food is, weighted by how nutritious it is for this creature's diet |
+| Food per view slice | 5 | How close the nearest food is, weighted by how nutritious it is for this creature's diet (a strong signal: 0 to 8, see below) |
 | Creature per view slice | 5 | How close the nearest creature is |
 | Size per view slice | 5 | That creature's size compared with mine: −1 much smaller, +1 much bigger |
 | Glass wall | 3 | How close the wall is, plus two numbers for which way the center lies |
@@ -177,11 +178,15 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 
 **Walking is a choice:** the thrust output runs from −1 to 1 and must pass a dead zone of 0.3 (`thrustDeadZone: 0.3`) before the creature walks at all; above that, thrust scales smoothly up to top speed. A random brain often rests instead of wandering into food by luck, so a creature that walks toward food has really learned to.
 
-**Legs, not fins:** bugs grip the soil. They speed up to the walking speed they want in about a fifth of a second (`walkAcceleration: 5`), stop even faster when they stop walking (`walkBraking: 14`), and never slide sideways when they turn (`legGrip: 14`). Nothing glides or drifts.
+**Legs, not fins:** bugs grip the soil. They speed up to the walking speed they want in about a fifth of a second (`walkAcceleration: 5`), stop even faster when they stop walking (`walkBraking: 14`), and never slide sideways when they turn (`legGrip: 14`). Nothing glides or drifts. A bigger body is not slower (`sizeSpeedPenalty: 0`): longer legs make up for the weight.
+
+**Turning takes effort:** legs can't reverse a turn instantly, so the actual turn eases toward what the brain asks for within about a tenth of a second (`turnResponse: 10`), and bugs swing smoothly instead of twitching. Turning also costs energy (`turnCost: 0.3`), so walking in endless circles is wasteful and turning toward food pays.
+
+**Strong food senses:** the five food inputs run from 0 to 8 instead of 0 to 1 (`foodSenseGain: 8`). With a weak signal, a newborn brain barely reacts to food, and mutation needed dozens of lucky steps to build steering, so in most worlds it never appeared in time. With a strong signal, random brains already react strongly to food (about half turn toward it and half away) and evolution only has to pick the right half. A test showed the world rewards steering hugely: 30 hand-built steering bugs dropped into an evolved population out-ate the natives two to three times and took over within 3 minutes. Nothing is pre-programmed: the direction of every response is still random at birth.
 
 **Energy**
 
-- Max energy grows with size squared: a size-10 creature holds 100 energy, or four sprouts.
+- Max energy grows with size squared: a size-10 creature holds 160 energy (`energyPerSize2: 1.6`), about six sprouts or 90 seconds of life without eating. A bigger tank rides out the gaps between meals, so adults live long enough to follow.
 - Each second costs upkeep (by size²), walking (by speed² × size), eyes (by sight range × field of view) and a small thinking cost.
 - Eating gives the food's energy × the creature's digestion for that food.
 - Health is separate. Bites lower it, and it slowly regrows by spending energy.
@@ -197,7 +202,7 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 
 **Babies**
 
-- A creature can reproduce when its reproduce output is on, its energy is above 60% of max, and it's at least 10 seconds old.
+- A creature can reproduce when its reproduce output is on, its energy is above 85% of max (`reproduceThreshold: 0.85`), and it's at least 10 seconds old. Waiting until it is well fed means a parent keeps a reserve after giving birth, and its baby starts with more energy.
 - It must also wait 20 seconds between babies (`reproduceCooldown: 20`). Without this pause, parents churn out doomed babies and most creatures live only about 20 seconds. With it, the parent keeps eating while it waits, so each baby is born stronger.
 - The baby gets the parent's baby-investment share of energy, and the parent pays a further 10% birth cost.
 - Babies start at half size and grow to full size as they mature, so you can watch them grow.
@@ -285,12 +290,13 @@ The look is a round glass terrarium on a lab bench at night, seen from directly 
 **Bugs and food must never look alike, at any zoom**
 
 - Bugs are bright cyan to blue, with a white-hot core and a glow that never shrinks below about 12 pixels on screen, so even babies stay visible when zoomed all the way out.
+- Zoomed out, a bug's body is drawn at least about 2.6 pixels in radius (`creatureMinBodyPx`), so bugs that evolve small (they tend to shrink from about 10.5 to 8.5) still read as little glowing ovals, not dots.
 - Sprouts are clearly green, smaller and dimmer: a faint green speck from afar, a tiny two-leaf seedling up close.
 
 **The world**
 
 - A navy lab bench in dim light, with a dark vignette at the edges.
-- The terrarium floor: dark soil with patches of moss, tinted toward navy, with fine soil grain that appears as you zoom in.
+- The terrarium floor: dark soil with patches of moss, tinted toward navy, with fine soil grain that appears as you zoom in. From the whole-terrarium view the moss is softer and darker (a second, blurrier floor painting), so it never looks like camouflage and the bugs stand out; it blends into the detailed floor as you zoom in.
 - The glass wall: a subtle glass rim with a soft highlight, and a shadow where the wall meets the soil.
 - A faint measuring grid, as if etched on the glass, that scales with zoom.
 - Heat lamps: warm pools of light with a gentle shimmer, over darker nutrient pads.
@@ -330,6 +336,8 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 **Laptop layout**
 
 - Top bar: logo, generation, population, species count and speed controls.
+- Generation shows the highest generation ever reached, so it never goes backwards when an old family line dies out.
+- Foraging skill shows "5.5× luck", a pill like "▲ from 1.8×" (the first minute's value), and a short line a stranger understands: "how fast hungry bugs find food, compared with blind luck".
 - Left panel (collapsible): world controls and settings, plus god mode from Session 3.
 - Right panel: the inspector, opened by clicking a creature.
 - Bottom drawer: charts and the lab log.
@@ -347,6 +355,7 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 - Babies, kills, food eaten, and the cause of death if it dies while selected.
 - Parent and children links you can click to jump between them.
 - The camera follows whoever is selected. Save to Hall of Fame arrives in Session 3.
+- If the bug you are following dies, nothing vanishes silently: a note says what happened (for example "Specimen #1750 starved at age 1:40"), a fading marker shows where, and a button offers to follow its child, or else its nearest living relative (grandchild, sibling, parent, cousin). After 6 seconds it switches automatically (`followNextSeconds`), unless you press "Stay here".
 
 **Brain viewer**
 
@@ -360,7 +369,8 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 
 - Population by species over time, as a flowing stacked streamgraph in species colors.
 - Average traits over time: speed, size, sight range and diet.
-- Foraging skill: food found per creature per minute. This is the proof that they're learning.
+- Foraging skill: how many times faster than blind luck a hungry bug finds food. This is the proof that they're learning (see section 10 for how it's measured).
+- Steering: how often a walking bug that can see food is pointed at it, next to what luck alone would give.
 - Births and deaths per minute, split by cause.
 - All drawn by the project's own lightweight chart code, to match the look.
 
@@ -449,7 +459,7 @@ genesis-lab/
 - A spatial hash grid with 160-unit cells, so each creature checks only nearby cells instead of every other creature.
 - Object pools for creatures, food and particles, and no new objects inside a tick, to avoid garbage-collection stutters.
 - Budget with 300 creatures and 1,500 sprouts on a typical laptop: under 3 ms per tick and under 8 ms per drawn frame, so the default 2x speed (2 ticks per frame) holds 60 fps.
-- Only what's on screen gets drawn. If fps stays under 45 for 3 seconds, footprints, particles and dust motes scale down automatically.
+- Only what's on screen gets drawn. If fps stays under 45 for 3 seconds, footprints, particles and dust motes scale down automatically. The first 5 seconds after loading are ignored, and quality comes back once fps holds at 50 or more for 4 seconds, so a laptop running at 52-54 fps recovers. If going back up makes it slow again at once, the next try waits twice as long (up to a minute).
 - The soil and moss are painted once into a texture when a world starts, so the floor costs one image per frame.
 - Phones get lower caps, fewer particles and no lamp shimmer by default.
 
@@ -480,13 +490,21 @@ Balance makes or breaks an evolution sim, so every change is proven with a headl
 **Headless test (tools/headless.html)**
 
 - Runs the simulation at full speed with no drawing, for example for 20 simulated minutes, across several seeds.
-- Prints a report: population over time, foraging skill at the start vs the end, species count, extinctions and deaths by cause.
+- Prints a report, minute by minute and as a summary: population, sprouts, foraging skill, food found per bug, steering (with what luck would give), births and deaths by cause, newcomers, generation and average size. It also reports how long a clicked adult lives on (median, average, the quickest quarter), the share of babies that never ate, how old bugs are when they die, the lowest population in minutes 1-5, and the minute the population first reaches 150.
+
+**How foraging skill is measured.** Foraging skill = how many times faster than blind luck a hungry bug finds food. While a bug is hungry (it has room for a whole sprout), every moment adds the meals luck alone would bring it: the food density around it × the width of ground its body sweeps × its speed. Skill = meals it actually found ÷ meals luck would have given, over the last minute. Random brains score about 1-2×. Because the bug and "luck" face the same food, a crowded terrarium with little food doesn't drag the number down. (The old measure, food found per bug per minute, always peaked during the population boom and then fell, because once the terrarium fills up each bug can only eat about what it burns. It is still in the report as "food per bug".)
+
+**How steering is measured.** Every half second: of the bugs that are walking and can see food, what share are pointed at the food (within 20° of straight ahead)? Luck alone gives the cone's share of each bug's field of view, which is reported next to it, because bugs that evolve tunnel vision look "pointed" without steering at all. Steering "clearly rises" when minute 10 is at least 10 points above minute 1 and above luck.
 - The builder runs it after every balance change and shows you the numbers.
 
 **Health checks: must pass at the end of each session**
 
 - Foraging skill at least doubles within 10 simulated minutes, in 3 of 3 seeds.
-- Population stays between 25% and 100% of the cap for 30 simulated minutes.
+- Steering toward food clearly rises by minute 10, in 3 of 3 seeds.
+- A clicked adult (after minute 3) usually lives at least another 60 seconds: the median across worlds is 60 s or more.
+- Fewer than about 20% of babies die without eating once.
+- The start stays lively: the population stays above about 40 in minutes 1-5 and reaches 150 by about minute 4.
+- Population stays between 25% and 100% of the cap for 30 simulated minutes, once it has boomed to half the cap. (The check starts there because a world now begins with 90 bugs, so it can pass a quarter of the cap within a minute and dip below it again while the starters die out.)
 - Once creatures have evolved, the population floor kicks in less than once per 10 simulated minutes.
 - From Session 3: a meat-eater species appears in at least 3 of 5 seeds within 20 simulated minutes, and prey survive alongside it.
 
@@ -547,6 +565,8 @@ Don't start a session until the gate before it passes. The times are estimates; 
 
 **Between Sessions 1 and 2: the terrarium switch.** Session 1 first built an ocean in a culture dish. Before Session 2 the world became the lab terrarium described here: a reskin plus still air and walking, with the brains, genes, evolution, energy, babies and headless test unchanged. The foraging gate was re-run and still passes: x4.40, x4.19 and x4.07 in seeds 1–3 (the ocean gave x2.61, x2.76 and x3.03). The one balance change was a full starting tank (`startEnergy: 1.0`, section 4). The ocean version is saved as the git tag `ocean-version`. Commit: "Switch to lab terrarium world".
 
+**Terrarium feedback round (still before Session 2).** Testing showed bugs dying too young to follow, foraging skill peaking early and then falling, unreliable steering, a generation counter that went backwards and an empty start. The fixes, all in config.js and sections 4, 5 and 10: foraging skill measured against luck; strong food senses; turning that takes effort; bigger energy tanks; breeding only when 85% full; no wasteful grazing; more sprout growth; 90 starting bugs; and the best-fed rule at the cap. Results on 20 worlds (10 simulated minutes each), before → after: steering clearly rose in 7 → 16; skill doubled in 16 → 18; a clicked adult lived a median of 33 s → 69 s; babies that never ate 33% → 12%; the lowest population in minutes 1-5 was 18 → 53; and the population reached 150 by minute 4 in 7 → 18 worlds (all 20 by minute 5). Bugs still shrink a little over 30 minutes (about 10.5 to 8.5, as before), so small bugs are now drawn bigger when zoomed out. Commit: "Terrarium feedback: lifespan, skill, early game".
+
 **Session 2 · See inside their minds (2–3 hours)**
 
 - [ ] Inspector with genes, bars, stats, and parent and children links
@@ -562,6 +582,7 @@ Don't start a session until the gate before it passes. The times are estimates; 
 **Session 3 · Predators, species and god mode (2–3 hours)**
 
 - [ ] Meat-eating, biting, meat pellets and the predator look: meat-eaters grow pincers and a spiky shell
+- [ ] Meat pellets must stay easy to see inside the lamp light: amber meat on warm orange light can disappear, so give meat its own shape and a dark outline or brighter core, and check it in a screenshot under a lamp
 - [ ] Species detection, generated names and family colors
 - [ ] Species streamgraph and family tree
 - [ ] Lab log lines for new species, extinctions and crashes
@@ -747,7 +768,8 @@ Every decision is made, so Session 1 can start as soon as setup is done.
 | Mutation | A small random change to the DNA when a baby is born |
 | Generation | How many parents back a creature's family line goes |
 | Species | A group whose DNA is close enough to count as one kind |
-| Foraging skill | Food found per creature per minute; the main "are they learning?" number |
+| Foraging skill | How many times faster than blind luck a hungry bug finds food; the main "are they learning?" number |
+| Steering | How often a walking bug that can see food is pointed at it, compared with what luck alone would give |
 | Terrarium | A glass container with soil and plants, here a round lab one seen from above |
 | Sprout | A tiny seedling: the plant-eaters' food |
 | fps | Frames per second, or how smooth it looks; 60 is buttery |

@@ -19,6 +19,7 @@ GL.Creature = (function () {
     this.inputs = new Float32Array(C.brainInputs);
     this.hidden = new Float32Array(C.brainHidden);
     this.outputs = new Float32Array(C.brainOutputs);
+    this.ancestors = new Int32Array(3);  // parent, grandparent and great-grandparent ids (0 = none), for finding relatives
     this.alive = false;
     this.id = 0;
     this.fx = null;            // drawing-only state, owned by the renderer
@@ -29,12 +30,14 @@ GL.Creature = (function () {
     reset: function () {
       this.generation = 0; this.parentId = 0; this.age = 0; this.bornAt = 0;
       this.x = 0; this.y = 0; this.heading = 0; this.vx = 0; this.vy = 0; this.speed = 0;
-      this.thrust = 0; this.turn = 0; this.wantsBaby = false; this.biting = false;
+      this.thrust = 0; this.turn = 0; this.turnRate = 0; this.wantsBaby = false; this.biting = false;
       this.energy = 0; this.health = 0; this.wallTouch = 0;
       this.foodEaten = 0; this.babies = 0; this.kills = 0;
       this.lastEatTick = -100000; this.bornTick = 0; this.cooldown = 0;
       this.lookAngle = 0; this.lookAmount = 0;
+      this.foodDensity = 0; this.hungry = false;
       this.deathCause = '';
+      this.ancestors.fill(0);
       this.hue = 180; this.primitive = false; this.clockPhase = 0;
       this.inputs.fill(0); this.hidden.fill(0); this.outputs.fill(0);
     },
@@ -75,17 +78,18 @@ GL.Creature = (function () {
       // Food: per slice, the best (closest, most nutritious) piece.
       var food = world.food;
       bestFood.fill(0);
-      var lookVal = 0, lookAng = 0;
+      var lookVal = 0, lookAng = 0, near = 0;
       n = world.foodGrid.query(x, y, sight, buf);
       for (k = 0; k < n; k++) {
         i = buf[k];
         if (!food.alive[i]) continue;
         var dx = food.x[i] - x, dy = food.y[i] - y, d2 = dx * dx + dy * dy;
         if (d2 >= s2) continue;
-        var phi = M.fastAtan2(dy * ch - dx * sh, dx * ch + dy * sh);
-        if (phi < -half || phi > half) continue;
         var digest = food.kind[i] === 0 ? this.digestPlant : this.digestMeat;
         if (digest <= 0) continue;
+        near++;                                      // edible food within sight, in any direction
+        var phi = M.fastAtan2(dy * ch - dx * sh, dx * ch + dy * sh);
+        if (phi < -half || phi > half) continue;
         var val = (1 - Math.sqrt(d2) * invSight) * digest;
         var s = Math.floor((phi + half) * invSlice);
         if (s < 0) s = 0; else if (s >= SLICES) s = SLICES - 1;
@@ -111,7 +115,7 @@ GL.Creature = (function () {
       }
 
       for (s = 0; s < SLICES; s++) {
-        inp[IN.FOOD + s] = bestFood[s];
+        inp[IN.FOOD + s] = bestFood[s] * C.foodSenseGain;
         if (bestCreIdx[s] >= 0) {
           var other = list[bestCreIdx[s]];
           inp[IN.CREATURE + s] = 1 - Math.sqrt(bestCre[s]) * invSight;
@@ -146,6 +150,7 @@ GL.Creature = (function () {
 
       this.lookAngle = lookAng;
       this.lookAmount = lookVal;
+      this.foodDensity = near / (Math.PI * s2);     // food per square unit around me (for the fair skill measure)
     },
 
     // 2. THINK: run the brain.
@@ -159,10 +164,13 @@ GL.Creature = (function () {
       var dz = C.thrustDeadZone, th = (out[OUT.THRUST] - dz) / (1 - dz);
       this.thrust = th < 0 ? 0 : (th > 1 ? 1 : th);
       this.turn = out[OUT.TURN];
+      // Legs can't reverse a turn instantly: the actual turn rate eases toward what the brain asks for.
+      var tr = C.turnResponse * dt; if (tr > 1) tr = 1;
+      this.turnRate += (this.turn - this.turnRate) * tr;
       this.biting = out[OUT.BITE] > 0;
       this.wantsBaby = out[OUT.REPRODUCE] > 0;
 
-      this.heading = M.wrapAngle(this.heading + this.turn * this.turnSpeed * dt);
+      this.heading = M.wrapAngle(this.heading + this.turnRate * this.turnSpeed * dt);
 
       // Walking: split the velocity into "forward" (along the heading) and "sideways".
       // Legs speed a bug up at walkAcceleration but brake it fast (walkBraking), so it
@@ -193,13 +201,22 @@ GL.Creature = (function () {
       this.x = nx; this.y = ny;
       this.speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
 
+      // Fair foraging measure (it never changes behaviour): while hungry (room for a whole
+      // sprout), add the meals blind luck would bring a bug walking here at this speed:
+      // food density x the width of ground it sweeps (it eats what its body touches) x speed.
+      this.hungry = this.energy + C.sproutEnergy <= this.maxEnergy;
+      if (this.hungry) world.stats.luckExpected += this.foodDensity * 2 * this.reach() * this.speed * dt;
+
       // Eat one piece of touching food per tick, if there's room in the stomach.
       if (this.energy < this.maxEnergy) this.eat(world);
     },
 
+    // How far from its centre a bug can reach food: its body plus the sprout's own size.
+    reach: function () { return this.radius + C.sproutRadius; },
+
     eat: function (world) {
       var food = world.food, buf = world.queryBuf;
-      var reach = this.radius + C.sproutRadius, reach2 = reach * reach;
+      var reach = this.reach(), reach2 = reach * reach;
       var n = world.foodGrid.query(this.x, this.y, reach, buf);
       for (var k = 0; k < n; k++) {
         var i = buf[k];
@@ -208,9 +225,11 @@ GL.Creature = (function () {
         if (dx * dx + dy * dy > reach2) continue;
         var digest = food.kind[i] === 0 ? this.digestPlant : this.digestMeat;
         if (digest <= 0) continue;
+        if (C.eatOnlyWithRoom && this.energy + food.energy[i] * digest > this.maxEnergy) continue;   // too full: leave it
         this.energy = Math.min(this.maxEnergy, this.energy + food.energy[i] * digest);
         food.remove(i);
         this.foodEaten++;
+        if (this.hungry) world.stats.luckMeals++;
         this.lastEatTick = world.tick;
         world.onEat(this, food.x[i], food.y[i]);
         return;
@@ -230,7 +249,7 @@ GL.Creature = (function () {
         + C.walkCost * this.speed * this.speed * r
         + this.eyeCost
         + C.thinkCost
-        + C.turnCost * Math.abs(this.turn)
+        + C.turnCost * Math.abs(this.turnRate)
         + C.wallEnergyCost * this.wallTouch;
       this.energy -= cost * dt;
 
