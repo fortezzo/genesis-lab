@@ -44,8 +44,10 @@ GL.HUD = function (app) {
   this.el.chipClose.addEventListener('click', function () { self.dismissDeath(); app.renderer.select(null); self.update(0, true); });
   this.el.chipStay.addEventListener('click', function () { self.dismissDeath(); self.update(0, true); });
   this.el.chipFollow.addEventListener('click', function () { self.followNext(); });
-  window.addEventListener('resize', function () { self.placeChip(); });
-  this.placeChip();
+  window.addEventListener('resize', function () { self.fitTopbar(true); });
+  this.fitLevel = 0;
+  this.fitTopbar(true);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { self.fitTopbar(true); });
   document.getElementById('btn-champion').addEventListener('click', function () { self.followChampion(); });
   document.getElementById('btn-charts').addEventListener('click', function () { self.toggleDrawer(); });
   document.getElementById('drawer-close').addEventListener('click', function () { self.toggleDrawer(false); });
@@ -91,6 +93,32 @@ GL.HUD.prototype = {
   },
 
   hideHint: function () { if (this.el.hint) this.el.hint.classList.add('gone'); },
+
+  // Make the whole top bar fit the window: try the roomiest layout first, then step down (key hints
+  // go, then button names, then tighter spacing, then the skill's one-line explanation) until the
+  // last button ends inside the bar. The last resort puts the speed buttons on a second row. fresh = start again from the roomiest (on resize); otherwise it
+  // only steps down, for when a number grows wider while running.
+  fitTopbar: function (fresh) {
+    var bar = this.el.topbar, max = 5;
+    if (!bar) return;
+    var narrow = window.innerWidth <= 860;              // narrow screens wrap the bar onto two rows instead
+    var level = narrow ? 4 : (fresh ? 0 : this.fitLevel);
+    for (; level <= max; level++) {
+      for (var k = 1; k <= max; k++) bar.classList.toggle('fit-' + k, level >= k && !(narrow && k === 3));
+      if (narrow || !this.topbarOverflows()) break;
+    }
+    this.fitLevel = Math.min(level, max);
+    if (narrow) bar.classList.remove('fit-5');
+    this.placeChip();
+  },
+  topbarOverflows: function () {
+    var bar = this.el.topbar, r = bar.getBoundingClientRect(), right = r.right - 6, kids = bar.children;
+    for (var i = 0; i < kids.length; i++) {
+      var k = kids[i].getBoundingClientRect();
+      if (k.width > 0 && k.right > right) return true;
+    }
+    return false;
+  },
 
   // Keep the chip just under the top bar, however tall the bar is (it wraps on narrow screens).
   placeChip: function () {
@@ -200,6 +228,8 @@ GL.HUD.prototype = {
     this.textTimer -= dt;
     if (this.textTimer > 0 && !force) return;
     this.textTimer = 0.25;                     // text refreshes 4 times a second
+    this.fitTimer = (this.fitTimer || 0) + 1;
+    if (this.fitTimer % 4 === 0 && this.topbarOverflows()) this.fitTopbar(false);   // a number grew wider
     if (s.startSkill > 0) {
       var up = s.skill >= s.startSkill;
       this.el.trend.textContent = (up ? '▲' : '▼') + ' from ' + s.startSkill.toFixed(1) + '×';

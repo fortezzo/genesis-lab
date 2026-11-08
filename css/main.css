@@ -98,8 +98,9 @@ body.ready > #hint { transition-delay: 1.4s; }
   color: var(--text);
 }
 .value small { font-size: 11px; color: var(--text-dim); margin-left: 3px; }
-.stat.skill { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 10px; min-width: 150px; }
-.stat.skill .label { flex-basis: 100%; }
+.stat.skill { display: grid; grid-template-columns: auto 1fr; justify-content: start; align-items: baseline; column-gap: 10px; min-width: 150px; }
+.stat.skill .label, .stat.skill .hint { grid-column: 1 / -1; justify-self: start; }
+.stat.skill .trend { justify-self: start; }
 .trend {
   font-family: var(--font-num);
   font-size: 11px;
@@ -113,7 +114,6 @@ body.ready > #hint { transition-delay: 1.4s; }
 .trend.down { color: var(--amber); border-color: rgba(255, 176, 32, 0.35); background: rgba(255, 176, 32, 0.08); }
 /* A short plain-English line under the foraging skill, so a stranger knows what the number means. */
 .stat.skill .hint {
-  flex-basis: 100%;
   font-size: 10.5px;
   line-height: 1.2;
   color: var(--text-dim);
@@ -468,10 +468,24 @@ body.drawer-open .toast, body.drawer-open #scalebar { display: none; }
 body.ready > #flash { opacity: 0; transition: opacity 0.5s ease; }
 body.ready > #flash.on { opacity: 0.3; transition: none; }
 
-@media (max-width: 1240px) {
-  .tool span { display: none; }
-  .stat.skill .hint { display: none; }
+/* The top bar fits any width: the interface measures it and steps down through these levels
+   until nothing sticks out (hud.js fitTopbar). Every button keeps its name as a tooltip. */
+@media (min-width: 861px) {
+  /* Nothing in the bar squeezes: if it can't fit, it sticks out, and the next level takes over. */
+  #topbar > *, #topbar .stat, #topbar .tool, #topbar .speed { flex-shrink: 0; }
 }
+#topbar.fit-1 .tools kbd { display: none; }
+#topbar.fit-2 .tool span { display: none; }
+#topbar.fit-2 .tool { padding: 0 8px; }
+#topbar.fit-3 { gap: 16px; padding-left: 14px; }
+#topbar.fit-3 .brand { letter-spacing: 0.22em; }
+#topbar.fit-3 .stats { gap: 16px; }
+#topbar.fit-3 .stat { min-width: 0; }
+#topbar.fit-3 .stat.skill .hint { white-space: normal; max-width: 205px; }
+#topbar.fit-3 .speed { min-width: 34px; padding: 0 7px; }
+#topbar.fit-4 .stat.skill .hint { display: none; }
+#topbar.fit-5 { flex-wrap: wrap; row-gap: 8px; }
+#topbar.fit-5 .speeds { margin-left: auto; }
 @media (max-width: 1080px) {
   .log-col { width: 260px; flex-basis: 260px; }
 }
@@ -494,7 +508,7 @@ body.ready > #flash.on { opacity: 0.3; transition: none; }
   /* Phones: generation and population side by side, foraging skill on its own row below. */
   .stats { flex-wrap: wrap; row-gap: 6px; }
   .stat { flex: 0 0 auto; }
-  .stat.skill { flex-basis: 100%; }
+  .stat.skill { flex-basis: 100%; }  /* own row on phones */
   .stat.skill .hint { white-space: normal; }
   .speed { flex: 1; min-width: 0; padding: 0 4px; }
 }
