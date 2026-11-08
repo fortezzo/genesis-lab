@@ -89,12 +89,12 @@ GL.HUD.prototype = {
       var up = s.skill >= s.startSkill;
       this.el.trend.textContent = (up ? '▲' : '▼') + ' from ' + s.startSkill.toFixed(1) + '×';
       this.el.trend.className = 'trend ' + (up ? 'up' : 'down');
-      this.el.trend.title = 'In the first minute, the random first bugs found food ' + s.startSkill.toFixed(1) +
-        ' times faster than luck. Now it is ' + s.skill.toFixed(1) + ' times (' + (s.skill / s.startSkill).toFixed(1) + 'x better).';
+      this.el.trend.title = 'In the first minute every bug had a random brain, so it started at about 1x (' + s.startSkill.toFixed(1) +
+        'x). Now these bugs find food ' + s.skill.toFixed(1) + ' times faster than random brains would, right here and now.';
     } else {
       this.el.trend.textContent = 'measuring';
       this.el.trend.className = 'trend';
-      this.el.trend.title = 'The first minute is the baseline: brand-new random brains';
+      this.el.trend.title = 'The first minute is the baseline: every bug starts with a random brain';
     }
     this.updateChip();
     if (app.renderer.debug) this.updateDebug();
@@ -233,7 +233,9 @@ GL.HUD.prototype = {
       'speed      ' + (loop.paused ? 'paused' : loop.effectiveSpeed.toFixed(1) + 'x actual') + '\n' +
       'creatures  ' + w.creatures.length + ' / ' + w.cap + '\n' +
       'sprouts    ' + w.food.sproutCount + '\n' +
-      'skill      ' + w.stats.skill.toFixed(2) + 'x luck, food ' + w.stats.foodRate.toFixed(2) + ' per bug per minute\n' +
+      'skill      ' + w.stats.skill.toFixed(2) + 'x random brains (' + w.stats.adultRate.toFixed(1) + ' vs ' + w.stats.ghostRate.toFixed(1) +
+        ' meals per hungry minute)\n' +
+      'also       ' + w.stats.skillLuck.toFixed(2) + 'x luck, ' + w.stats.foodRate.toFixed(2) + ' food per bug per minute\n' +
       'steering   ' + Math.round(w.stats.steer * 100) + '% (luck ' + Math.round(w.stats.steerLuck * 100) + '%)\n' +
       'grid cells ' + w.creatureGrid.usedCells() + ' creature, ' + w.foodGrid.usedCells() + ' food\n' +
       'sim time   ' + Math.floor(t / 60) + ':' + ((t % 60) < 10 ? '0' : '') + (t % 60) + '\n' +

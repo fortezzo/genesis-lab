@@ -9,6 +9,9 @@ GL.Headless = (function () {
   var CLICK_FROM = 180;        // ...starting at minute 3
   var HORIZON = 120;           // only judge clicks and babies at least this long before the run ends
   var BOOM_POP = 150;          // the population "booms" when it first reaches this many bugs
+  var SWAP_MINUTES = [1, 10, 30, 60]; // brain-swap check: during these minutes...
+  var SWAP_BUGS = 120;         // ...copy this many grown bugs with fresh random brains and measure them for a minute
+                               // (random brains find little food late on, so fewer than ~100 gives a noisy answer)
 
   // Prepare one seed's run. Call advance() repeatedly until it returns true.
   function SeedRun(seed, minutes) {
@@ -22,6 +25,8 @@ GL.Headless = (function () {
     this.death = new Map();    // id -> [time of death, meals eaten, age at death, cause]
     this.born = [];            // [id, time, id, time, ...] for every baby
     this.clicks = [];          // [id, time, ...]: "a viewer clicks this adult now"
+    this.swaps = [];           // brain-swap check results, one per SWAP_MINUTES entry
+    this.probe = null;
     var kill = w.kill, spawnBaby = w.spawnBaby;
     w.kill = function (index, cause) {
       var c = w.creatures[index];
@@ -39,14 +44,47 @@ GL.Headless = (function () {
     var end = Math.min(this.totalTicks, w.tick + maxTicks);
     var every = CLICK_EVERY * tps, from = CLICK_FROM * tps;
     while (w.tick < end) {
+      this.swapCheck();
       w.step();
       if (w.tick >= from && w.tick % every === 0) {
         var list = w.creatures;
         for (var i = 0; i < list.length; i++) if (list[i].age >= C.maturityAge) this.clicks.push(list[i].id, w.time);
       }
     }
+    this.swapCheck();                // a check that ends exactly at the end of the run still gets written
     this.ms += now() - t0;
     return w.tick >= this.totalTicks;
+  };
+
+  // Brain-swap check: at the start of each SWAP_MINUTES minute, copy SWAP_BUGS grown bugs (same
+  // bodies, same places, same terrarium) with fresh random brains, as ghosts that only pretend to
+  // eat. A minute later, compare them with the evolved bugs over the same 60 seconds.
+  SeedRun.prototype.swapCheck = function () {
+    var w = this.world, s = w.stats, tpm = 60 * C.ticksPerSecond, gb = w.ghostBase;
+    if (this.probe && w.tick === this.probe.endTick) {
+      var p = this.probe, g = p.group, d = function (now, then) { return now - then; };
+      var aMeals = d(s.adultMeals, p.s.adultMeals), aHungry = d(s.adultHungry, p.s.adultHungry), aTime = d(s.adultTime, p.s.adultTime);
+      var bMeals = d(gb.meals, p.s.gMeals), bHungry = d(gb.hungry, p.s.gHungry);
+      this.swaps.push({
+        minute: p.minute,
+        evolvedPerMin: aTime > 0 ? aMeals / aTime * 60 : 0,
+        randomPerMin: g.time > 0 ? g.meals / g.time * 60 : 0,
+        evolvedLuck: d(s.luckExpected, p.s.luck) > 0 ? d(s.luckMeals, p.s.luckMeals) / d(s.luckExpected, p.s.luck) : 0,
+        randomLuck: g.luck > 0 ? g.luckMeals / g.luck : 0,
+        evolvedScore: GL.Stats.ratio(aMeals, aHungry, bMeals, bHungry),
+        randomScore: GL.Stats.ratio(g.meals, g.hungry, bMeals, bHungry)
+      });
+      w.removeProbe(g);
+      this.probe = null;
+    }
+    if (!this.probe && w.tick % tpm === 0 && SWAP_MINUTES.indexOf(w.tick / tpm + 1) >= 0 && w.tick + tpm <= this.totalTicks) {
+      this.probe = {
+        minute: w.tick / tpm + 1, endTick: w.tick + tpm,
+        group: w.addProbe(SWAP_BUGS, 60, (this.seed * 7919 + w.tick) >>> 0),
+        s: { adultMeals: s.adultMeals, adultHungry: s.adultHungry, adultTime: s.adultTime, luckMeals: s.luckMeals,
+             luck: s.luckExpected, gMeals: gb.meals, gHungry: gb.hungry }
+      };
+    }
   };
 
   function quantile(sorted, q) {
@@ -120,6 +158,10 @@ GL.Headless = (function () {
       foodRate1: m1 ? m1.foodRate : 0, foodRate10: m10 ? m10.foodRate : 0, foodRatePeak: peak, foodRatePeakAt: peakAt,
       foodRateEnd: mins.length ? mins[mins.length - 1].foodRate : 0,
       steer1: steer1, steer10: steer10, steerLuck10: luck10,
+      swaps: this.swaps,
+      speedEnd: mins.length ? mins[mins.length - 1].avgSpeed : 0,
+      speedSpreadEnd: mins.length ? mins[mins.length - 1].speedSpread : 0,
+      speedHighEnd: mins.length ? mins[mins.length - 1].speedHigh : 0,
       steerRises: steer10 - steer1 >= 0.10 && steer10 - luck10 >= 0.10,
       clicks: rem.length, clickMedian: quantile(rem, 0.5), clickQuarter: quantile(rem, 0.25),
       clickMean: rem.length ? remSum / rem.length : 0,
@@ -153,22 +195,32 @@ GL.Headless = (function () {
   function formatSeed(r) {
     var L = [];
     L.push('=== Seed ' + r.seed + ' - ' + r.minutes + ' simulated minutes (' + f2(r.msPerTick) + ' ms per tick) ===');
-    L.push(' min |  pop | sprouts | food/bug | skill | steering (luck) | births | deaths | newcomers | gen | size');
+    L.push(' min |  pop | sprouts | food/bug | skill | x luck | steering (luck) | births | deaths | gen | size | top speed (spread, 140+)');
     for (var i = 0; i < r.perMinute.length; i++) {
       var m = r.perMinute[i];
       L.push(pad(m.minute, 4) + ' | ' + pad(Math.round(m.population), 4) + ' | ' + pad(m.sprouts, 7) + ' | ' +
-        pad(f2(m.foodRate), 8) + ' | ' + pad(f1(m.skill) + 'x', 5) + ' | ' + pad(pct(m.steer) + ' (' + pct(m.steerLuck) + ')', 15) + ' | ' +
-        pad(m.births, 6) + ' | ' + pad(m.deaths, 6) + ' | ' + pad(m.arrivals, 9) + ' | ' + pad(m.maxGeneration, 3) + ' | ' + pad(f1(m.avgSize), 4));
+        pad(f2(m.foodRate), 8) + ' | ' + pad(f1(m.skill) + 'x', 5) + ' | ' + pad(f1(m.skillLuck) + 'x', 6) + ' | ' +
+        pad(pct(m.steer) + ' (' + pct(m.steerLuck) + ')', 15) + ' | ' +
+        pad(m.births, 6) + ' | ' + pad(m.deaths, 6) + ' | ' + pad(m.maxGeneration, 3) + ' | ' + pad(f1(m.avgSize), 4) + ' | ' +
+        pad(Math.round(m.avgSpeed) + ' (' + Math.round(m.speedSpread) + ', ' + pct(m.speedHigh) + ')', 24));
     }
     var pops = [], skills = [], rates = [];
     for (i = 0; i < r.perMinute.length; i++) {
       pops.push(r.perMinute[i].population); skills.push(r.perMinute[i].skill); rates.push(r.perMinute[i].foodRate);
     }
     L.push('Population      [' + spark(pops) + ']');
-    L.push('Skill (x luck)  [' + spark(skills) + ']');
+    L.push('Skill           [' + spark(skills) + ']');
     L.push('Food per bug    [' + spark(rates) + ']');
-    L.push('Foraging skill (how many times faster than luck a hungry bug finds food): minute 1 = ' + f2(r.startSkill) +
+    L.push('Foraging skill (how many times faster than random brains a hungry bug finds food): minute 1 = ' + f2(r.startSkill) +
       'x, minute 10 = ' + f2(r.skillAt10) + 'x  ->  x' + f2(r.ratio) + (r.doubled ? '  PASS (at least doubled)' : '  FAIL (did not double)'));
+    if (r.swaps.length) {
+      L.push('Brain-swap check (' + SWAP_BUGS + ' grown bugs copied with fresh random brains, measured for 60 s next to the evolved bugs):');
+      L.push('   minute | evolved: meals/min, x luck, skill | random brains: meals/min, x luck, skill');
+      r.swaps.forEach(function (sw) {
+        L.push(pad(sw.minute, 9) + ' | ' + pad(f2(sw.evolvedPerMin) + ', ' + f1(sw.evolvedLuck) + 'x, ' + f1(sw.evolvedScore) + 'x', 31) +
+          ' | ' + pad(f2(sw.randomPerMin) + ', ' + f1(sw.randomLuck) + 'x, ' + f1(sw.randomScore) + 'x', 37));
+      });
+    }
     L.push('Food found per bug per minute: minute 1 = ' + f2(r.foodRate1) + ', peak ' + f2(r.foodRatePeak) + ' in minute ' +
       r.foodRatePeakAt + ', minute 10 = ' + f2(r.foodRate10) + ', last minute = ' + f2(r.foodRateEnd));
     L.push('Steers toward food it can see: minute 1 = ' + pct(r.steer1) + ', minute 10 = ' + pct(r.steer10) +
@@ -195,6 +247,8 @@ GL.Headless = (function () {
     if (a && b) {
       L.push('Average genes, minute 1 -> minute ' + b.minute + ': speed ' + f1(a.avgSpeed) + ' -> ' + f1(b.avgSpeed) +
         ', size ' + f1(a.avgSize) + ' -> ' + f1(b.avgSize) + ', sight ' + f1(a.avgSight) + ' -> ' + f1(b.avgSight));
+      L.push('Top speed in the last minute: average ' + Math.round(b.avgSpeed) + ' (ceiling 150), spread ' + Math.round(b.speedSpread) +
+        ', ' + pct(b.speedHigh) + ' of bugs at 140 or more');
     }
     L.push('Highest generation reached: ' + r.maxGeneration);
     return L.join('\n');

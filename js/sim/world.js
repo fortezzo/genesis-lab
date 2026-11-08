@@ -22,6 +22,7 @@ GL.World = (function () {
     this.dt = 1 / C.ticksPerSecond;
     this.nextId = 1;
     this.sproutGrowthMultiplier = 1;     // god mode will change this (Session 3)
+    this.lampBrightness = 1;             // the lamps' average strength right now (1 = normal)
     this.floorTimer = 0;
     this.watchId = 0;                    // the creature the viewer is following (set by the interface)
     this.watchDeath = null;              // filled in if that creature dies: what happened, where and when
@@ -45,6 +46,15 @@ GL.World = (function () {
     this.queryBuf = new Int32Array(Math.max(foodCap, poolSize));
     this.readyBuf = new Int32Array(poolSize);   // scratch list of creatures ready to have a baby
 
+    // Ghosts: an invisible control group of random brains, for a fair learning proof (stats.js).
+    // Each ghost copies a living grown bug's body, place and heading, gets a fresh random brain,
+    // and walks around for ghostLifetime seconds counting the sprouts it would have eaten. Ghosts
+    // never eat real food, never breed, and nothing can see them. They draw their random numbers
+    // from their own generator, so the real simulation is exactly the same with or without them.
+    var ghostCount = Math.max(8, Math.round(C.ghostCount * Math.min(1, this.cap / C.capLaptop)));
+    this.ghostGroups = [];
+    this.ghostBase = this.makeGhostGroup(ghostCount, C.ghostLifetime, true, (this.seed ^ 0x6A057) >>> 0);
+
     // Heat lamps: each circles the terrarium at its own pace, wanders in and out, and waxes and wanes.
     this.lamps = [];
     for (i = 0; i < C.lampCount; i++) {
@@ -64,7 +74,7 @@ GL.World = (function () {
   World.prototype = {
     // ------------------------------------------------------------- lamps
     updateLamps: function () {
-      var t = this.time, R = C.terrariumRadius;
+      var t = this.time, R = C.terrariumRadius, total = 0;
       for (var i = 0; i < this.lamps.length; i++) {
         var v = this.lamps[i];
         var a = v.angle0 + v.spin * C.lampOrbitSpeed * t;
@@ -74,7 +84,9 @@ GL.World = (function () {
         v.y = Math.sin(a) * orbit;
         var s = M.clamp(0.5 + 0.8 * this.noise.noise1(t * C.lampWanderSpeed * 1.7 + 50 + i * 3.3, v.lane + 20), 0, 1);
         v.strength = M.lerp(C.lampStrengthMin, C.lampStrengthMax, s);
+        total += v.strength;
       }
+      this.lampBrightness = total / Math.max(1, this.lamps.length) / ((C.lampStrengthMin + C.lampStrengthMax) / 2);
     },
     // Choose a lamp at random, stronger lamps more often.
     pickLamp: function () {
@@ -163,6 +175,60 @@ GL.World = (function () {
       return c;
     },
 
+    // ------------------------------------------------------------ ghosts
+    makeGhostGroup: function (count, lifetime, respawn, rngSeed) {
+      var grp = { ghosts: [], lifetime: lifetime, respawn: respawn, rng: new GL.RNG(rngSeed), started: false,
+                  meals: 0, hungry: 0, time: 0, luck: 0, luckMeals: 0 };
+      for (var i = 0; i < count; i++) { var g = new GL.Creature(); g.ghost = true; g.group = grp; grp.ghosts.push(g); }
+      this.ghostGroups.push(grp);
+      return grp;
+    },
+    // Turn a ghost into a copy of a random grown bug (same genes, place, heading and energy) with a fresh random brain.
+    cloneGhost: function (g, grp, lifetime) {
+      var list = this.creatures, n = list.length, rng = grp.rng, src = null;
+      for (var tries = 0; tries < 12 && n > 0; tries++) {
+        var c = list[Math.floor(rng.next() * n)];
+        if (c.age >= C.growTime) { src = c; break; }
+      }
+      if (!src) { g.alive = false; return false; }
+      g.reset();
+      g.genes.set(src.genes);
+      GL.Genome.randomBrain(rng, g.brain);
+      g.age = src.age;
+      g.applyGenes();
+      g.x = src.x; g.y = src.y; g.heading = src.heading; g.vx = src.vx; g.vy = src.vy; g.speed = src.speed;
+      g.energy = src.energy; g.health = src.health; g.hue = src.hue;
+      g.clockPhase = rng.angle();
+      g.ghostLeft = lifetime;
+      g.alive = true;
+      return true;
+    },
+    // 5b. Ghosts sense, think and walk like everyone else; their meals are imaginary.
+    stepGhosts: function (dt) {
+      for (var gi = 0; gi < this.ghostGroups.length; gi++) {
+        var grp = this.ghostGroups[gi], list = grp.ghosts, i, g;
+        if (!grp.started) {                           // first time: stagger lifetimes so ghosts retire one by one
+          grp.started = true;
+          for (i = 0; i < list.length; i++) this.cloneGhost(list[i], grp, grp.respawn ? grp.lifetime * (i + 1) / list.length : grp.lifetime);
+        }
+        // Each ghost lives in a slot for ghostLifetime seconds. If it would have starved, it stops counting,
+        // like a real bug that dies, and its slot waits out the rest of its time before copying a new bug.
+        // (The brain-swap check in the headless report uses exactly the same rules, so the two can be compared.)
+        for (i = 0; i < list.length; i++) {
+          g = list[i];
+          g.ghostLeft -= dt;
+          if (g.alive && g.energy <= 0) g.alive = false;
+          if (g.ghostLeft <= 0) { if (grp.respawn) this.cloneGhost(g, grp, grp.lifetime); else g.alive = false; }
+          if (!g.alive) continue;
+          g.sense(this); g.think(); g.act(this, dt); g.metabolism(dt);
+        }
+      }
+    },
+    // Test helper for the headless report's brain-swap check: a one-off group of ghosts copied
+    // from grown bugs right now, measured for "seconds" and then dropped with removeProbe().
+    addProbe: function (count, seconds, rngSeed) { return this.makeGhostGroup(count, seconds, false, rngSeed); },
+    removeProbe: function (grp) { var k = this.ghostGroups.indexOf(grp); if (k >= 0) this.ghostGroups.splice(k, 1); },
+
     kill: function (index, cause) {
       var list = this.creatures, c = list[index];
       c.alive = false;
@@ -199,6 +265,7 @@ GL.World = (function () {
       // 4-5. Act, then metabolism.
       for (i = 0; i < n; i++) list[i].act(this, dt);
       for (i = 0; i < n; i++) list[i].metabolism(dt);
+      this.stepGhosts(dt);
 
       // 6. Deaths, then births.
       var maxAge = C.lifespan * C.maxAgeFactor, oldAge = C.lifespan * C.oldAgeStart;

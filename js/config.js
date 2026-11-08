@@ -6,8 +6,9 @@
 //
 // Balance notes (found with tools/headless.html and 20-world sweeps; see PLAN.md section 10).
 // The foraging test compares minute 1 with minute 10, so minute 1 must measure random brains fairly:
-//  - Foraging skill is "times faster than luck" (see js/sim/stats.js), so crowding and food
-//    shortages don't drag it down after the population boom.
+//  - Foraging skill is "times faster than random brains": real bugs against invisible random-brain
+//    ghosts in the same spots at the same moment (js/sim/world.js and stats.js), so food
+//    shortages and crowding can't inflate or drag down the learning proof.
 //  - thrustDeadZone: a random brain often rests instead of bumping into food by luck.
 //  - Primitives arrive with a full tank (startEnergy) but must settle (primitiveSettleTime)
 //    before breeding, so minute 1 isn't one lucky family multiplying.
@@ -19,6 +20,9 @@
 //    energyPerSize2, reproduceThreshold, eatOnlyWithRoom and sproutGrowthRate keep adults alive
 //    long enough to follow; startCreatures keeps the start lively; turnCost discourages endless
 //    circling; capBestFed keeps evolution going once the terrarium is full.
+//  - Fair proof and speed trade-off: agilitySpeed/agilityExp make long fast legs clumsy, so top
+//    speed is no longer a free upgrade; sproutGrowthFollowsLamps and the wider lamp strength range
+//    give the population real ups and downs.
 var GL = GL || {};
 
 GL.Config = {
@@ -44,14 +48,17 @@ GL.Config = {
   lampOrbitSpeed: 0.010,     // how fast lamps circle the terrarium, radians per second (about 10 minutes per lap)
   lampWanderSpeed: 0.004,    // how fast each lamp's distance from the centre wanders in and out
   lampSpread: 700,           // sprouts grow in a patch around each lamp, about this wide (units)
-  lampStrengthMin: 0.6,      // a lamp's growth strength slowly wanders between this...
-  lampStrengthMax: 1.4,      // ...and this, so feeding grounds wax and wane
+  lampStrengthMin: 0.4,      // a lamp's growth strength slowly wanders between this...
+  lampStrengthMax: 1.6,      // ...and this, so feeding grounds wax and wane (was 0.6-1.4)
+  sproutGrowthFollowsLamps: true, // total sprout growth rises and falls with the lamps' average brightness, so the
+                             // whole terrarium has richer and leaner spells and the population booms and dips
+                             // instead of sitting flat at the cap
 
   // --------------------------------------------------------------- sprouts
   sproutMax: 1500,           // most sprouts in the terrarium at once
   sproutStart: 60,           // sprouts when a world begins (a sparse start, so random brains are put to the test)
-  sproutGrowthRate: 34,      // new sprouts per second when the terrarium is bare; slows as it fills up
-                             // (was 26: more food keeps adults alive; above ~37, steering evolves less reliably)
+  sproutGrowthRate: 32,      // new sprouts per second when the terrarium is bare (at average lamp brightness);
+                             // slows as it fills up. Was 34 before the speed trade-off; slower bugs need less food
   sproutOpenGroundChance: 0.2, // share of new sprouts that come up on open soil instead of under a lamp
   sproutEnergy: 25,          // energy in one sprout
   sproutRadius: 4,           // size of a sprout, for eating
@@ -102,6 +109,11 @@ GL.Config = {
   walkCost: 0.000017,        // energy per second for walking, x speed squared x size
   eyeCost: 0.0005,           // energy per second for eyes, x sight range x field of view (radians)
   thinkCost: 0.3,            // energy per second for running the brain
+  agilitySpeed: 70,          // long legs built for speed are clumsy: a bug with a top speed above this turns
+  agilityExp: 1.5,           // more slowly, by (agilitySpeed / top speed) to this power (at 140: 35% of its turn
+                             // gene). Without it, top speed was a free upgrade (it costs nothing until used) and
+                             // climbed to the 150 ceiling in every world. Energy costs for leg muscles were tried
+                             // too, but they had to be so high to stop the race that adults starved younger
   turnCost: 0.3,             // energy per second for turning at full turn rate (was 0.03: legs work harder to
                              // turn, so walking in endless circles costs something and steering pays)
   startEnergy: 1.0,          // primitive creatures start with this share of their max energy. A full tank:
@@ -145,6 +157,8 @@ GL.Config = {
 
   // ----------------------------------------------------------------- stats
   statsIntervalTicks: 30,    // sample statistics every this many ticks (half a simulated second)
+  ghostCount: 64,            // invisible random-brain bugs measured alongside the real ones (fewer on phones)
+  ghostLifetime: 60,         // each ghost walks for this many seconds, then becomes a fresh copy of another bug
   skillWindowSec: 60,        // foraging skill is measured over the last this many seconds
   steerConeDeg: 20,          // steering measure: a bug counts as pointed at the food it sees within this many degrees
   steerMinSpeed: 0.2,        // ...and as walking above this share of its top speed

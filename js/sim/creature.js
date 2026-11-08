@@ -3,6 +3,9 @@
 // health and age. Creature objects are pooled and reused, so a tick never
 // creates new objects. Each tick the world calls, in order:
 //   sense() -> think() -> act() -> metabolism()
+// A "ghost" is a creature used only for measuring (see world.js): it senses,
+// thinks and walks like any other, but its meals are imaginary. It never
+// removes food, and nothing in the world can see it.
 var GL = GL || {};
 
 GL.Creature = (function () {
@@ -20,6 +23,9 @@ GL.Creature = (function () {
     this.hidden = new Float32Array(C.brainHidden);
     this.outputs = new Float32Array(C.brainOutputs);
     this.ancestors = new Int32Array(3);  // parent, grandparent and great-grandparent ids (0 = none), for finding relatives
+    this.ghost = false;                  // true for the invisible random-brain control group (world.js)
+    this.group = null;                   // a ghost's group, where it counts its imaginary meals
+    this.ghostMeals = new Float32Array(16); // where a ghost "ate" lately (x, y pairs), so it can't count a sprout twice
     this.alive = false;
     this.id = 0;
     this.fx = null;            // drawing-only state, owned by the renderer
@@ -36,6 +42,7 @@ GL.Creature = (function () {
       this.lastEatTick = -100000; this.bornTick = 0; this.cooldown = 0;
       this.lookAngle = 0; this.lookAmount = 0;
       this.foodDensity = 0; this.hungry = false;
+      this.ghostLeft = 0; this.ghostMealCount = 0;
       this.deathCause = '';
       this.ancestors.fill(0);
       this.hue = 180; this.primitive = false; this.clockPhase = 0;
@@ -47,7 +54,9 @@ GL.Creature = (function () {
       var g = this.genes;
       this.fullRadius = g[G.SIZE];
       this.topSpeed = g[G.SPEED] * Math.pow(C.refSize / this.fullRadius, C.sizeSpeedPenalty);
-      this.turnSpeed = g[G.TURN];
+      // Long legs built for speed are clumsy: above agilitySpeed, a faster top speed means slower turning.
+      var clumsy = this.topSpeed > C.agilitySpeed ? Math.pow(C.agilitySpeed / this.topSpeed, C.agilityExp) : 1;
+      this.turnSpeed = g[G.TURN] * clumsy;
       this.sight = g[G.SIGHT];
       this.fov = g[G.FOV] * Math.PI / 180;
       var diet = g[G.DIET];
@@ -85,6 +94,7 @@ GL.Creature = (function () {
         if (!food.alive[i]) continue;
         var dx = food.x[i] - x, dy = food.y[i] - y, d2 = dx * dx + dy * dy;
         if (d2 >= s2) continue;
+        if (this.ghost && this.ghostAte(food.x[i], food.y[i])) continue;   // a ghost already "ate" this one
         var digest = food.kind[i] === 0 ? this.digestPlant : this.digestMeat;
         if (digest <= 0) continue;
         near++;                                      // edible food within sight, in any direction
@@ -204,11 +214,21 @@ GL.Creature = (function () {
       // Fair foraging measure (it never changes behaviour): while hungry (room for a whole
       // sprout), add the meals blind luck would bring a bug walking here at this speed:
       // food density x the width of ground it sweeps (it eats what its body touches) x speed.
+      // Grown bugs also count their hungry time, for the comparison with random brains (stats.js).
       this.hungry = this.energy + C.sproutEnergy <= this.maxEnergy;
-      if (this.hungry) world.stats.luckExpected += this.foodDensity * 2 * this.reach() * this.speed * dt;
+      if (this.ghost) this.group.time += dt;
+      else if (this.age >= C.growTime) world.stats.adultTime += dt;
+      if (this.hungry) {
+        var luck = this.foodDensity * 2 * this.reach() * this.speed * dt;
+        if (this.ghost) { this.group.luck += luck; this.group.hungry += dt; }
+        else {
+          world.stats.luckExpected += luck;
+          if (this.age >= C.growTime) world.stats.adultHungry += dt;
+        }
+      }
 
       // Eat one piece of touching food per tick, if there's room in the stomach.
-      if (this.energy < this.maxEnergy) this.eat(world);
+      if (this.energy < this.maxEnergy) { if (this.ghost) this.ghostEat(world); else this.eat(world); }
     },
 
     // How far from its centre a bug can reach food: its body plus the sprout's own size.
@@ -229,11 +249,39 @@ GL.Creature = (function () {
         this.energy = Math.min(this.maxEnergy, this.energy + food.energy[i] * digest);
         food.remove(i);
         this.foodEaten++;
-        if (this.hungry) world.stats.luckMeals++;
+        if (this.hungry) { world.stats.luckMeals++; if (this.age >= C.growTime) world.stats.adultMeals++; }
         this.lastEatTick = world.tick;
         world.onEat(this, food.x[i], food.y[i]);
         return;
       }
+    },
+
+    // A ghost "eats" without eating: it counts the meal and gains the energy, but the sprout stays
+    // for the real bugs. It remembers where it ate, so it never counts the same sprout twice.
+    ghostEat: function (world) {
+      var food = world.food, buf = world.queryBuf, grp = this.group;
+      var reach = this.reach(), reach2 = reach * reach;
+      var n = world.foodGrid.query(this.x, this.y, reach, buf);
+      for (var k = 0; k < n; k++) {
+        var i = buf[k];
+        if (!food.alive[i]) continue;
+        var dx = food.x[i] - this.x, dy = food.y[i] - this.y;
+        if (dx * dx + dy * dy > reach2) continue;
+        var digest = food.kind[i] === 0 ? this.digestPlant : this.digestMeat;
+        if (digest <= 0) continue;
+        if (C.eatOnlyWithRoom && this.energy + food.energy[i] * digest > this.maxEnergy) continue;
+        if (this.ghostAte(food.x[i], food.y[i])) continue;
+        this.energy = Math.min(this.maxEnergy, this.energy + food.energy[i] * digest);
+        var slot = (this.ghostMealCount++ % 8) * 2;
+        this.ghostMeals[slot] = food.x[i]; this.ghostMeals[slot + 1] = food.y[i];
+        if (this.hungry) { grp.meals++; grp.luckMeals++; }
+        return;
+      }
+    },
+    ghostAte: function (fx, fy) {
+      var m = this.ghostMeals, n = Math.min(this.ghostMealCount, 8) * 2;
+      for (var j = 0; j < n; j += 2) if (m[j] === fx && m[j + 1] === fy) return true;
+      return false;
     },
 
     // 4. METABOLISM: pay energy for living, walking, seeing and thinking; heal; age; grow.

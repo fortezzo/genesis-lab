@@ -68,7 +68,8 @@ GL.Food.prototype = {
     var C = GL.Config, rng = world.rng;
     var room = 1 - this.sproutCount / C.sproutMax;
     if (room <= 0) return;
-    this.growAcc += C.sproutGrowthRate * world.sproutGrowthMultiplier * room * dt;
+    var lamps = C.sproutGrowthFollowsLamps ? world.lampBrightness : 1;   // brighter lamps overall: more sprouts
+    this.growAcc += C.sproutGrowthRate * world.sproutGrowthMultiplier * lamps * room * dt;
     while (this.growAcc >= 1) {
       this.growAcc -= 1;
       this.spawnSprout(world);

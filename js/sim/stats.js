@@ -2,15 +2,18 @@
 // Counts births, deaths by cause and meals, and every half simulated second
 // takes a sample for the charts and the headless report.
 //
-// Foraging skill, the main "are they learning?" number, is fair to crowding:
-// it says how many times faster than blind luck a hungry bug finds food.
-// While a bug is hungry, each tick adds the meals luck alone would bring it
-// (food density around it x the ground its body sweeps as it walks), and
-// each meal it actually eats is counted. Skill = meals / luck's meals, over
-// the last 60 simulated seconds. Random brains score about 1x. Because both
-// sides see the same food, a crowded terrarium doesn't drag the number down.
-// (Food found per bug per minute is still recorded as foodRate: it peaks
-// during the population boom and then falls to what each bug burns.)
+// Foraging skill, the main "are they learning?" number, compares the real bugs
+// with random brains in the same terrarium at the same moment: how many times
+// faster a hungry grown bug finds food than a hungry random-brain "ghost"
+// (world.js) does. Ghosts copy real bugs' bodies and places but have fresh
+// random brains, and only pretend to eat, so food shortages and crowding hit
+// both sides equally and can't inflate the number. At minute 1 every bug has a
+// random brain, so skill starts at about 1x.
+// Rate = meals found while hungry (room for a whole sprout) / minutes spent hungry.
+// Also recorded, for reference: skillLuck (times faster than blind luck: meals
+// / meals luck would bring a bug walking there, which rises as food gets scarce
+// even for random brains) and foodRate (food found per bug per minute, which
+// peaks during the population boom and then falls to what each bug burns).
 var GL = GL || {};
 
 GL.Stats = function () {
@@ -20,6 +23,9 @@ GL.Stats = function () {
   this.foodEaten = 0;          // pieces of food eaten, ever
   this.luckMeals = 0;          // meals eaten by hungry bugs, ever (updated by the creatures)
   this.luckExpected = 0;       // meals blind luck would have given those hungry bugs, ever
+  this.adultMeals = 0;         // meals found by hungry grown bugs, ever...
+  this.adultHungry = 0;        // ...and the seconds they spent hungry
+  this.adultTime = 0;          // seconds lived by grown bugs, ever (for meals per minute)
   this.arrivals = 0;           // primitive creatures that wandered in (population floor)
   this.floorEpisodes = 0;      // times the population dropped below the floor
   this.belowFloor = false;
@@ -31,12 +37,19 @@ GL.Stats = function () {
   this.winFood = new Float64Array(this.winLen);  // cumulative food at each sample
   this.winMeals = new Float64Array(this.winLen); // cumulative hungry meals at each sample
   this.winLuck = new Float64Array(this.winLen);  // cumulative luck-expected meals at each sample
+  this.winAdultMeals = new Float64Array(this.winLen);  // the same for grown bugs: meals while hungry...
+  this.winAdultHungry = new Float64Array(this.winLen); // ...and hungry seconds
+  this.winGhostMeals = new Float64Array(this.winLen);  // and for the random-brain ghosts
+  this.winGhostHungry = new Float64Array(this.winLen);
   this.winPop = new Float64Array(this.winLen);   // population at each sample
   this.winTime = new Float64Array(this.winLen);
   this.winCount = 0;
   this.winHead = 0;
-  this.skill = 0;              // foraging skill right now: times faster than luck
+  this.skill = 0;              // foraging skill right now: times faster than random brains
   this.startSkill = -1;        // the first full minute's skill (the "before" number)
+  this.skillLuck = 0;          // times faster than blind luck (for reference)
+  this.adultRate = 0;          // meals per hungry minute: grown bugs...
+  this.ghostRate = 0;          // ...and random-brain ghosts
   this.foodRate = 0;           // food found per bug per minute, right now (for reference)
   this.steer = 0;              // share of walking bugs that see food and are pointed at it (last sample)
   this.steerLuck = 0;          // what luck alone would give for that share
@@ -46,13 +59,20 @@ GL.Stats = function () {
   this.resetMinute();
 
   // Sample history for charts (Session 2): plain arrays of numbers.
-  this.history = { time: [], population: [], sprouts: [], skill: [], foodRate: [], steer: [],
+  this.history = { time: [], population: [], sprouts: [], skill: [], adultRate: [], ghostRate: [], foodRate: [], steer: [],
                    speed: [], size: [], sight: [], diet: [] };
 
   this.population = 0;
   this.maxGeneration = 0;      // deepest family line among the living (can go down when a line dies out)
   this.maxGenerationEver = 0;  // highest generation ever reached (never goes down: shown in the top bar)
   this.avgGeneration = 0;
+};
+
+// Real bugs' meals per hungry second divided by the ghosts'. A half-meal head start on the ghosts'
+// side keeps the number sensible when they found almost nothing in the window.
+GL.Stats.ratio = function (meals, hungry, ghostMeals, ghostHungry) {
+  if (hungry <= 0 || ghostHungry <= 0) return 0;
+  return (meals / hungry) / ((ghostMeals + 0.5) / ghostHungry);
 };
 
 GL.Stats.prototype = {
@@ -73,6 +93,8 @@ GL.Stats.prototype = {
     this._minBirths = 0; this._minDeaths = 0; this._minArrivals = 0;
     this._minPopMin = Infinity; this._minPopMax = 0; this._minFloor = 0;
     this._minMeals0 = this.luckMeals; this._minLuck0 = this.luckExpected;
+    this._minAdultMeals0 = this.adultMeals; this._minAdultHungry0 = this.adultHungry;
+    this._minGhostMeals0 = this._ghostMeals || 0; this._minGhostHungry0 = this._ghostHungry || 0;
     this._minSteerSeen = 0; this._minSteerHit = 0; this._minSteerLuck = 0;
     this._minBabyDeaths = 0; this._minBabyUnfed = 0;
   },
@@ -84,13 +106,16 @@ GL.Stats.prototype = {
 
     // Generations, average traits, and steering: of the bugs that are walking and can see
     // food, how many are pointed at it (within steerConeDeg either side of straight ahead)?
-    var maxGen = 0, genSum = 0, sp = 0, sz = 0, si = 0, di = 0;
+    var maxGen = 0, genSum = 0, sp = 0, sp2 = 0, fast = 0, tu = 0, sz = 0, si = 0, di = 0;
     var cone = C.steerConeDeg * Math.PI / 180, seen = 0, hit = 0, luck = 0;
     for (i = 0; i < n; i++) {
       var c = list[i];
       if (c.generation > maxGen) maxGen = c.generation;
       genSum += c.generation;
-      sp += c.genes[G.SPEED]; sz += c.genes[G.SIZE]; si += c.genes[G.SIGHT]; di += c.genes[G.DIET];
+      var spd = c.genes[G.SPEED];
+      sp += spd; sp2 += spd * spd; if (spd >= 140) fast++;
+      tu += c.genes[G.TURN];
+      sz += c.genes[G.SIZE]; si += c.genes[G.SIGHT]; di += c.genes[G.DIET];
       if (c.lookAmount > 0 && c.thrust > 0 && c.speed > C.steerMinSpeed * c.topSpeed) {
         seen++;
         if (Math.abs(c.lookAngle) <= cone) hit++;
@@ -104,8 +129,12 @@ GL.Stats.prototype = {
     this._minSteerSeen += seen; this._minSteerHit += hit; this._minSteerLuck += luck;
 
     // Live numbers over the rolling window.
+    var gb = world.ghostBase;
+    this._ghostMeals = gb ? gb.meals : 0; this._ghostHungry = gb ? gb.hungry : 0;
     var h = this.winHead;
     this.winFood[h] = this.foodEaten; this.winMeals[h] = this.luckMeals; this.winLuck[h] = this.luckExpected;
+    this.winAdultMeals[h] = this.adultMeals; this.winAdultHungry[h] = this.adultHungry;
+    this.winGhostMeals[h] = this._ghostMeals; this.winGhostHungry[h] = this._ghostHungry;
     this.winPop[h] = n; this.winTime[h] = world.time;
     this.winHead = (h + 1) % this.winLen;
     if (this.winCount < this.winLen) this.winCount++;
@@ -118,7 +147,12 @@ GL.Stats.prototype = {
       var food = this.foodEaten - this.winFood[oldest];
       this.foodRate = (avgPop > 0 && minutes > 0) ? food / avgPop / minutes : 0;
       var expected = this.luckExpected - this.winLuck[oldest];
-      this.skill = expected > 0 ? (this.luckMeals - this.winMeals[oldest]) / expected : 0;
+      this.skillLuck = expected > 0 ? (this.luckMeals - this.winMeals[oldest]) / expected : 0;
+      var aH = this.adultHungry - this.winAdultHungry[oldest], gH = this._ghostHungry - this.winGhostHungry[oldest];
+      this.adultRate = aH > 0 ? (this.adultMeals - this.winAdultMeals[oldest]) / aH * 60 : 0;
+      this.ghostRate = gH > 0 ? (this._ghostMeals - this.winGhostMeals[oldest]) / gH * 60 : 0;
+      this.skill = GL.Stats.ratio(this.adultMeals - this.winAdultMeals[oldest], aH,
+                                  this._ghostMeals - this.winGhostMeals[oldest], gH);
     }
 
     // Per-minute summary.
@@ -129,6 +163,8 @@ GL.Stats.prototype = {
     if (this._minSamples >= perMinute) {
       var pop = this._minPopSum / this._minSamples;
       var luckMin = this.luckExpected - this._minLuck0;
+      var aM = this.adultMeals - this._minAdultMeals0, aHm = this.adultHungry - this._minAdultHungry0;
+      var gM = this._ghostMeals - this._minGhostMeals0, gHm = this._ghostHungry - this._minGhostHungry0;
       var rec = {
         minute: this.minutes.length + 1,
         population: pop,
@@ -138,7 +174,10 @@ GL.Stats.prototype = {
         floorEpisodes: this._minFloor,
         food: this._minFood,
         foodRate: pop > 0 ? this._minFood / pop : 0,                         // food per bug per minute
-        skill: luckMin > 0 ? (this.luckMeals - this._minMeals0) / luckMin : 0, // times faster than luck
+        skill: GL.Stats.ratio(aM, aHm, gM, gHm),                              // times faster than random brains
+        skillLuck: luckMin > 0 ? (this.luckMeals - this._minMeals0) / luckMin : 0, // times faster than luck
+        adultRate: aHm > 0 ? aM / aHm * 60 : 0,                               // meals per hungry minute, grown bugs
+        ghostRate: gHm > 0 ? gM / gHm * 60 : 0,                               // ...and random-brain ghosts
         steer: this._minSteerSeen ? this._minSteerHit / this._minSteerSeen : 0,
         steerLuck: this._minSteerSeen ? this._minSteerLuck / this._minSteerSeen : 0,
         births: this._minBirths,
@@ -148,7 +187,10 @@ GL.Stats.prototype = {
         arrivals: this._minArrivals,
         maxGeneration: this.maxGenerationEver,
         sprouts: world.food.sproutCount,
-        avgSpeed: n ? sp / n : 0, avgSize: n ? sz / n : 0, avgSight: n ? si / n : 0
+        avgSpeed: n ? sp / n : 0, avgSize: n ? sz / n : 0, avgSight: n ? si / n : 0,
+        speedSpread: n ? Math.sqrt(Math.max(0, sp2 / n - (sp / n) * (sp / n))) : 0,  // spread of top speeds (standard deviation)
+        speedHigh: n ? fast / n : 0,                                         // share of bugs with a top speed of 140 or more
+        avgTurn: n ? tu / n : 0                                              // average turn-speed gene
       };
       this.minutes.push(rec);
       if (this.startSkill < 0) this.startSkill = rec.skill;
@@ -158,7 +200,8 @@ GL.Stats.prototype = {
     // Chart history (thinned out to every other sample once it is full).
     var hist = this.history;
     hist.time.push(world.time); hist.population.push(n); hist.sprouts.push(world.food.sproutCount);
-    hist.skill.push(this.skill); hist.foodRate.push(this.foodRate); hist.steer.push(this.steer);
+    hist.skill.push(this.skill); hist.adultRate.push(this.adultRate); hist.ghostRate.push(this.ghostRate);
+    hist.foodRate.push(this.foodRate); hist.steer.push(this.steer);
     hist.speed.push(n ? sp / n : 0); hist.size.push(n ? sz / n : 0);
     hist.sight.push(n ? si / n : 0); hist.diet.push(n ? di / n : 0);
     if (hist.time.length > C.statsHistoryMax) {
