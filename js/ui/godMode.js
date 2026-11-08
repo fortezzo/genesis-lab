@@ -42,6 +42,7 @@ GL.GodMode = (function () {
     this.el.close.addEventListener('click', function () { self.toggle(false); });
     this.el.tabGod.addEventListener('click', function () { self.showTab('god'); });
     this.el.tabHof.addEventListener('click', function () { self.showTab('hof'); });
+    document.getElementById('tab-settings').addEventListener('click', function () { self.showTab('settings'); });
   }
 
   GodMode.prototype = {
@@ -67,6 +68,8 @@ GL.GodMode = (function () {
       document.body.classList.toggle('lab-open', on);
       this.el.btn.classList.toggle('active', on);
       this.el.btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      var sb = document.getElementById('btn-settings');
+      if (sb) sb.classList.toggle('active', on && this.tab === 'settings');
       if (!on) this.disarm();
       this.app.hud.hideHint();
       this.app.layoutChanged();
@@ -74,12 +77,23 @@ GL.GodMode = (function () {
     },
     showTab: function (tab) {
       this.tab = tab;
-      this.el.tabGod.classList.toggle('active', tab === 'god'); this.el.tabGod.setAttribute('aria-selected', tab === 'god');
-      this.el.tabHof.classList.toggle('active', tab === 'hof'); this.el.tabHof.setAttribute('aria-selected', tab === 'hof');
-      this.el.god.classList.toggle('hidden', tab !== 'god');
-      this.el.hof.classList.toggle('hidden', tab !== 'hof');
+      var tabs = { god: [this.el.tabGod, this.el.god], hof: [this.el.tabHof, this.el.hof],
+                   settings: [document.getElementById('tab-settings'), document.getElementById('settings')] };
+      for (var k in tabs) {
+        tabs[k][0].classList.toggle('active', tab === k); tabs[k][0].setAttribute('aria-selected', tab === k);
+        tabs[k][1].classList.toggle('hidden', tab !== k);
+      }
       if (tab !== 'god') this.disarm();
       if (tab === 'hof') this.app.hallOfFame.render();
+      if (tab === 'settings' && this.app.settings) this.app.settings.refresh();
+      var sb = document.getElementById('btn-settings');
+      if (sb) sb.classList.toggle('active', this.open && tab === 'settings');
+    },
+    // Open the panel on one tab (or close it if it is already showing that tab).
+    openTab: function (tab) {
+      if (this.open && this.tab === tab) { this.toggle(false); return; }
+      this.showTab(tab);
+      this.toggle(true);
     },
 
     // A tool button was pressed: act now, or arm the tool and wait for the pointer.

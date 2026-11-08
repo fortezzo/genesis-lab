@@ -20,6 +20,8 @@ GL.Renderer = function (canvas, world) {
   this.debug = false;
   this.reducedMotion = false;     // Session 4 adds the setting
   this.quality = { level: 2, footprints: 1, particles: 1, motes: 1, shimmer: true };
+  this.qualityMode = 'auto';      // 'auto' (adapts to the frame rate), or fixed: 'high', 'medium', 'low' (Settings)
+  this.phone = false;             // phones: no lamp shimmer and fewer particles, and auto quality tops out at medium
   this.lowFpsTime = 0; this.highFpsTime = 0;
   this.qualityClock = 0;          // real seconds the quality governor has been running
   this.lastDrop = -999;           // when quality last dropped...
@@ -104,6 +106,10 @@ GL.Renderer.prototype = {
   // recovers. If raising it makes things slow again straight away, the next try waits longer.
   adaptQuality: function (fps, dt) {
     var R = GL.Config.render, q = this.quality, now = (this.qualityClock += dt);
+    var fixed = { high: 2, medium: 1, low: 0 }[this.qualityMode];
+    if (fixed !== undefined) { q.level = fixed; this.lowFpsTime = 0; this.highFpsTime = 0; this.setQualityParts(); return; }
+    var top = this.phone ? 1 : 2;
+    if (q.level > top) q.level = top;
     if (now < R.qualityWarmupSeconds) { this.lowFpsTime = 0; this.highFpsTime = 0; }
     else if (fps < R.lowFpsThreshold) { this.lowFpsTime += dt; this.highFpsTime = 0; }
     else if (fps >= R.qualityRecoverFps) { this.highFpsTime += dt; this.lowFpsTime = 0; }
@@ -114,11 +120,15 @@ GL.Renderer.prototype = {
       this.recoverWait = now - this.lastRaise < 10 ? Math.min(R.qualityBackoffMax, this.recoverWait * 2) : R.qualityRecoverSeconds;
       this.lastDrop = now;
     }
-    if (this.highFpsTime > this.recoverWait && q.level < 2) { q.level++; this.highFpsTime = 0; this.lastRaise = now; }
+    if (this.highFpsTime > this.recoverWait && q.level < top) { q.level++; this.highFpsTime = 0; this.lastRaise = now; }
+    this.setQualityParts();
+  },
+  setQualityParts: function () {
+    var q = this.quality;
     q.footprints = [0, 0.5, 1][q.level];
     q.particles = [0.3, 0.6, 1][q.level];
     q.motes = [0.4, 0.7, 1][q.level];
-    q.shimmer = q.level > 0;
+    q.shimmer = q.level > 0 && !this.phone;
   },
 
   setWorldTransform: function () { var t = this.wt; this.ctx.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]); },

@@ -5,7 +5,7 @@
 // Any drag, scroll or click hands the camera back from cinematic mode.
 // Keys: Space pause, 1-5 speeds, F follow the champion, C charts and lab log,
 // G god mode and Hall of Fame, V cinematic camera, Esc put a tool away or deselect,
-// H hide all panels (screenshot mode), P save a screenshot, backtick debug overlay.
+// H hide all panels (screenshot mode), P save a screenshot, M mute, backtick debug overlay.
 var GL = GL || {};
 
 GL.Controls = function (app) {
@@ -107,6 +107,7 @@ GL.Controls = function (app) {
     else if (e.code === 'KeyV') app.cinematic.toggle();
     else if (e.code === 'KeyH') { app.hud.toggleClean(); app.layoutChanged(); }
     else if (e.code === 'KeyP') app.hud.screenshot();
+    else if (e.code === 'KeyM') app.sound.toggleMute();
     else return;
     interacted();
   });

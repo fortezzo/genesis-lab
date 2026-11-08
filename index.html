@@ -6,6 +6,16 @@
   <title>Genesis Lab</title>
   <meta name="description" content="Every creature has a brain. None of them were programmed. Watch them learn.">
   <meta name="theme-color" content="#050B18">
+  <meta property="og:title" content="Genesis Lab">
+  <meta property="og:description" content="A living ecosystem where creatures with neural-network brains evolve by themselves, in your browser.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://fortezzo.github.io/genesis-lab/">
+  <meta property="og:image" content="https://fortezzo.github.io/genesis-lab/assets/social-preview.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://fortezzo.github.io/genesis-lab/assets/social-preview.png">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23050B18'/%3E%3Cellipse cx='16' cy='17' rx='6' ry='8' fill='%2322E5FF'/%3E%3Ccircle cx='16' cy='8' r='3.2' fill='%234A9DFF'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
@@ -15,16 +25,16 @@
     <div class="brand">GENESIS <span>LAB</span></div>
     <div class="stats">
       <div class="stat" title="The highest generation any family line has reached so far">
-        <span class="label">Generation</span><span class="value" id="stat-gen">0</span>
+        <span class="label" data-short="Gen">Generation</span><span class="value" id="stat-gen">0</span>
       </div>
       <div class="stat" title="Creatures alive right now">
-        <span class="label">Population</span><span class="value" id="stat-pop">0</span>
+        <span class="label" data-short="Pop">Population</span><span class="value" id="stat-pop">0</span>
       </div>
       <div class="stat" title="Species alive right now. A family line that drifts far enough from its founder's DNA becomes a new species; a baby born with the other diet always does.">
-        <span class="label">Species</span><span class="value"><span id="stat-species">1</span><small id="stat-meat" class="meat-count" title="Meat-eaters alive right now"></small></span>
+        <span class="label" data-short="Species">Species</span><span class="value"><span id="stat-species">1</span><small id="stat-meat" class="meat-count" title="Meat-eaters alive right now"></small></span>
       </div>
       <div class="stat skill" title="How many times faster a hungry bug here finds food than a bug with a random brain would, in the same spot at the same moment (over the last simulated minute). The random brains are invisible ghost bugs that copy real bugs' bodies and places but think with fresh random brains, and only pretend to eat.">
-        <span class="label">Foraging skill</span>
+        <span class="label" data-short="Skill">Foraging skill</span>
         <span class="value"><span id="stat-skill">0.0</span><small>&times; random brains</small></span>
         <span class="trend" id="stat-trend">measuring</span>
         <span class="hint" id="stat-hint">how much faster they find food than random brains in the same spots</span>
@@ -42,6 +52,13 @@
       </button>
       <button id="btn-charts" class="tool" aria-label="Charts and lab log" aria-expanded="false" title="Charts and the lab log. Key C">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 13.5h12M3.5 11V7M7 11V3.5M10.5 11V6M14 11V8.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Charts &amp; log</span><kbd>C</kbd>
+      </button>
+      <button id="btn-settings" class="tool icon-only" aria-label="Settings" title="Settings: sound, quality, reduced motion, the guided story, save and load, new world">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.9 1.5h2.2l.4 1.9 1.3.6 1.7-1 1.5 1.5-1 1.7.6 1.3 1.9.4v2.2l-1.9.4-.6 1.3 1 1.7-1.5 1.5-1.7-1-1.3.6-.4 1.9H6.9l-.4-1.9-1.3-.6-1.7 1-1.5-1.5 1-1.7-.6-1.3-1.9-.4V6.9l1.9-.4.6-1.3-1-1.7 1.5-1.5 1.7 1 1.3-.6zM8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z" fill-rule="evenodd"/></svg>
+      </button>
+      <button id="btn-sound" class="tool icon-only" aria-label="Mute" aria-pressed="false" title="Mute the sound (key M)">
+        <svg class="snd-on" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h2.6L8 3v10L4.6 10H2z"/><path d="M10.4 5.4a3.6 3.6 0 0 1 0 5.2M12.2 3.8a6 6 0 0 1 0 8.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <svg class="snd-off" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h2.6L8 3v10L4.6 10H2z"/><path d="M10.5 6l4 4m0-4l-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
       </button>
     </div>
     <div class="speeds" id="speeds" role="group" aria-label="Simulation speed"></div>
@@ -140,6 +157,7 @@
       <div class="tabs" role="tablist">
         <button id="tab-god" class="tab active" role="tab" aria-selected="true">God mode</button>
         <button id="tab-hof" class="tab" role="tab" aria-selected="false">Hall of Fame <span id="hof-count" class="tab-count"></span></button>
+        <button id="tab-settings" class="tab" role="tab" aria-selected="false">Settings</button>
       </div>
       <button id="lab-close" class="icon-btn" aria-label="Close (G)" title="Close (G)">&times;</button>
     </div>
@@ -157,9 +175,44 @@
       </div>
       <div id="hof-msg" class="hof-msg"></div>
     </div>
+    <div id="settings" class="lab-body hidden"></div>
   </aside>
 
   <div id="caption" class="caption hidden" aria-live="polite"></div>
+
+  <!-- Guided story: a big caption for each chapter, a fast-forward note between them, and Skip. -->
+  <div id="story" class="story hidden" aria-live="polite">
+    <div class="story-card">
+      <div id="story-kicker" class="story-kicker"></div>
+      <div id="story-title" class="story-title"></div>
+      <div id="story-sub" class="story-sub"></div>
+    </div>
+  </div>
+  <div id="story-ff" class="story-ff hidden" aria-hidden="true"></div>
+  <button id="story-skip" class="story-skip">Skip story</button>
+
+  <!-- Phones: one bottom sheet at a time. -->
+  <nav id="tabbar" class="panel" aria-label="Panels">
+    <button data-tab="inspector" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="1.8"/></svg><span>Inspector</span></button>
+    <button data-tab="charts" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 13.5h12M3.5 11V7M7 11V3.5M10.5 11V6M14 11V8.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Charts</span></button>
+    <button data-tab="log" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Log</span></button>
+    <button data-tab="world" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.6 3.6 3.9.4-2.9 2.6.8 3.9L8 10l-3.4 2 .8-3.9L2.5 5.5l3.9-.4z"/></svg><span>World</span></button>
+  </nav>
+
+  <!-- The intro: a black screen, the title, the tagline, Begin. -->
+  <div id="intro" class="intro" role="dialog" aria-labelledby="intro-title">
+    <div class="intro-inner">
+      <h1 id="intro-title" class="intro-title">GENESIS <span>LAB</span></h1>
+      <p class="intro-tag">Every creature has a brain. None of them were programmed. Watch them learn.</p>
+      <div class="intro-actions">
+        <button id="intro-begin" class="intro-btn primary">Begin experiment</button>
+        <button id="intro-adv" class="intro-btn" aria-expanded="false" aria-controls="intro-advanced">Advanced</button>
+      </div>
+      <label class="intro-story"><input type="checkbox" id="intro-story" class="switch"><span>Guided story <em>· a 3-5 minute tour of what evolves in your world</em></span></label>
+      <div id="intro-advanced" class="intro-adv hidden"><div id="intro-form"></div></div>
+      <p class="intro-foot">Sound on, quietly · everything runs in your browser · nothing is sent anywhere</p>
+    </div>
+  </div>
   <div id="toast" class="panel toast hidden" aria-live="polite"></div>
   <div id="flash"></div>
 
@@ -178,7 +231,7 @@
   </div>
 
   <div id="scalebar" aria-hidden="true"><div id="scale-line"></div><span id="scale-label">10 mm</span></div>
-  <div id="hint">Drag to move &middot; Scroll to zoom &middot; Click a creature to see its brain &middot; C for charts &middot; G for god mode &middot; V for cinematic</div>
+  <div id="hint" class="gone" aria-live="polite"></div>
   <pre id="debug" class="hidden"></pre>
 
   <!-- Classic scripts in order, all under one global namespace: GL. -->
@@ -198,11 +251,14 @@
   <script src="js/sim/food.js"></script>
   <script src="js/sim/creature.js"></script>
   <script src="js/sim/world.js"></script>
+  <script src="js/sim/save.js"></script>
   <script src="js/render/sprites.js"></script>
   <script src="js/render/camera.js"></script>
   <script src="js/render/background.js"></script>
   <script src="js/render/effects.js"></script>
   <script src="js/render/renderer.js"></script>
+  <script src="js/ui/settings.js"></script>
+  <script src="js/audio/sound.js"></script>
   <script src="js/ui/hud.js"></script>
   <script src="js/ui/brainView.js"></script>
   <script src="js/ui/inspector.js"></script>
@@ -212,6 +268,9 @@
   <script src="js/ui/godMode.js"></script>
   <script src="js/ui/hallOfFame.js"></script>
   <script src="js/ui/cinematic.js"></script>
+  <script src="js/ui/storyMode.js"></script>
+  <script src="js/ui/intro.js"></script>
+  <script src="js/ui/phoneTabs.js"></script>
   <script src="js/ui/controls.js"></script>
   <script src="js/main.js"></script>
 </body>

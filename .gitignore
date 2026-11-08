@@ -16,3 +16,6 @@ desktop.ini
 # Tools we don't use, just in case
 node_modules/
 
+
+# The social clip is for posting, not for the repo (28 MB)
+docs/social-clip.mp4

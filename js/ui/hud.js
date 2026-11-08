@@ -53,7 +53,7 @@ GL.HUD = function (app) {
   document.getElementById('drawer-close').addEventListener('click', function () { self.toggleDrawer(false); });
   document.getElementById('tab-charts').addEventListener('click', function () { self.showDrawerTab('charts'); });
   document.getElementById('tab-tree').addEventListener('click', function () { self.showDrawerTab('tree'); });
-  setTimeout(function () { self.hideHint(); }, GL.Config.ui.hintSeconds * 1000);
+  document.getElementById('btn-settings').addEventListener('click', function () { app.godMode.openTab('settings'); });
 };
 
 GL.HUD.prototype = {
@@ -76,6 +76,16 @@ GL.HUD.prototype = {
       box.appendChild(b);
       self.speedBtns.push({ el: b, speed: s });
     });
+    // Phones show one speed button that steps through the speeds (the others are hidden there).
+    var cyc = document.createElement('button');
+    cyc.className = 'speed cycle';
+    cyc.title = 'Speed: tap for the next speed';
+    cyc.addEventListener('click', function () {
+      var opts = GL.Config.speedOptions, k = opts.indexOf(app.loop.speed);
+      app.loop.setSpeed(opts[(k + 1) % opts.length]); self.refreshSpeeds();
+    });
+    box.appendChild(cyc);
+    this.cycleBtn = cyc;
     this.refreshSpeeds();
   },
 
@@ -90,9 +100,13 @@ GL.HUD.prototype = {
     for (var i = 0; i < this.speedBtns.length; i++) {
       this.speedBtns[i].el.classList.toggle('active', !loop.paused && loop.speed === this.speedBtns[i].speed);
     }
+    if (this.cycleBtn) {
+      this.cycleBtn.textContent = loop.speed === 'max' ? 'Max' : loop.speed + 'x';
+      this.cycleBtn.setAttribute('aria-label', 'Speed ' + this.cycleBtn.textContent + ': next speed');
+    }
   },
 
-  hideHint: function () { if (this.el.hint) this.el.hint.classList.add('gone'); },
+  hideHint: function () { if (this.el.hint) { this.el.hint.classList.add('gone'); this.el.hint.classList.remove('on'); } },
 
   // Make the whole top bar fit the window: try the roomiest layout first, then step down (key hints
   // go, then button names, then tighter spacing, then the skill's one-line explanation) until the
@@ -101,7 +115,7 @@ GL.HUD.prototype = {
   fitTopbar: function (fresh) {
     var bar = this.el.topbar, max = 5;
     if (!bar) return;
-    var narrow = window.innerWidth <= 860;              // narrow screens wrap the bar onto two rows instead
+    var narrow = window.innerWidth <= 760;              // phones get their own slim bar (css: phone layout)
     var level = narrow ? 4 : (fresh ? 0 : this.fitLevel);
     for (; level <= max; level++) {
       for (var k = 1; k <= max; k++) bar.classList.toggle('fit-' + k, level >= k && !(narrow && k === 3));

@@ -457,5 +457,49 @@ GL.Config = {
     chartPred: '#DE5089',    // ...and meat-eaters
     chartGrid: 'rgba(140, 200, 255, 0.08)', // faint chart grid lines
     chartAxis: '#8FA6C4'     // axis labels
+  },
+
+  // ------------------------------------------------------------- settings panel (Session 4)
+  // World settings take effect when a new world starts (New world, or Begin after changing them in
+  // Advanced). Each is [smallest, largest, step]; the defaults are the numbers above.
+  settings: {
+    capRange: [50, 600, 25],          // creature cap
+    growthRange: [0.5, 2, 0.05],      // sprout growth, x sproutGrowthRate
+    mutationRange: [0.25, 3, 0.05],   // mutation strength: x the size of every DNA nudge (geneNudge, brainNudge)
+    worldSizes: { small: 1400, normal: 2000, large: 2600 },  // terrarium radius for each world size
+    defaultVolume: 0.35               // sound starts on at this quiet volume after Begin (0..1)
+  },
+
+  // ------------------------------------------------------------- sound made in code (Session 4)
+  sound: {
+    humLevel: 0.05,          // ambient hum loudness (before the volume slider)
+    humLowpass: 420,         // the hum and lab-air noise are muffled above this many Hz
+    birthLevel: 0.028,       // birth blips: loudness...
+    birthMaxPerSec: 5,       // ...at most this many per second (only births on screen make a sound)
+    chimeLevel: 0.075,       // extinction chime loudness
+    clickLevel: 0.035,       // interface clicks loudness
+    storyLevel: 0.05         // guided story: soft two-note chime at each chapter
+  },
+
+  // ------------------------------------------------------------- guided story mode (Session 4)
+  // A short documentary for first-time visitors: chapters are triggered by real events in this run.
+  storyMode: {
+    gapSpeed: 6,             // between chapters time runs at this speed...
+    gapSpeedLate: 16,        // ...and faster once the story has run this long, so it ends on time:
+    lateAfterSec: 150,       //    (real seconds)
+    momentSpeed: 1,          // during a chapter it slows to this speed so you can watch
+    momentSec: 12,           // a chapter lasts about this many real seconds...
+    captionSec: 8,           // ...with its caption on screen for this long
+    huntMaxSec: 16,          // the hunters chapter waits up to this long for a kill
+    openSec: 6,              // the opening shot of the whole terrarium, before flying in on one bug
+    endSec: 11,              // the closing card stays this long (any click ends it sooner)
+    minRealSec: 190,         // if every chapter has happened sooner than this, the champion gets a chapter too
+    maxRealSec: 300,         // the story ends by this many real seconds whatever happens...
+    maxSimMin: 20,           // ...or once this many simulated minutes have passed (predators had their chance)
+    skillMin: 2,             // "learning to find food": foraging skill at least this...
+    skillVsStart: 1.8,       // ...and this many times the first minute's skill (clearly risen)
+    hunterMembers: 10,       // a meat-eater species with this many alive counts as hunters (the Session 3 gate)
+    flyEase: 2.2,            // how quickly the camera flies to each chapter (per second)
+    inputGraceMs: 600        // clicks and keys in the first moment after Begin don't count as "skip"
   }
 };

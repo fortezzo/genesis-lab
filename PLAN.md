@@ -331,7 +331,7 @@ The look is a round glass terrarium on a lab bench at night, seen from directly 
 
 - Camera moves ease in and out; nothing snaps.
 - Panels slide in over about 200 ms.
-- A reduced-motion setting turns off footprints, the lamp shimmer and camera easing.
+- A reduced-motion setting turns off footprints, the lamp shimmer and camera easing. Built in Session 4: it follows the system's reduced-motion setting unless changed in Settings, and also stops swaying sprouts, screen shake and interface animations.
 
 **Accessibility**
 
@@ -348,6 +348,13 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 - A black screen; GENESIS LAB fades in, then the tagline.
 - Two buttons: Begin experiment, and Advanced for the seed and world settings.
 - After starting, three quick tips: drag to move, scroll to zoom, click a creature to see its brain.
+- Built in Session 4: the simulation waits behind the intro and starts at Begin, so minute 0 is the moment you start. A "Guided story" switch under the buttons is on for first-time visitors (see below).
+
+**Guided story (Session 4)**
+
+- A 3-5 minute documentary of the visitor's own world, starting at Begin experiment. Every chapter is triggered by a real event in this run: the start ("100 random brains. No instructions."), foraging skill clearly rising (at least 2× and 1.8× the first minute's), a meat-eater born by a gut switch, the first hunter species (10 meat-eaters alive), the first new plant-eater species, a big crash, a record by an evolved bug that had babies, and, if all of that happened in under about 3 minutes, the champion.
+- Each chapter shows a big caption while the cinematic camera flies to the bug or event, and time slows to 1x; between chapters time runs at 6x (16x after 2.5 minutes), with a small "fast-forwarding" note. It ends by 5 real minutes or 20 simulated minutes; chapters that never happened are skipped, and if no hunters evolved the ending suggests Predator drop.
+- "Skip story", or any click, tap, scroll or key, hands control back at 2x. It plays once (remembered in the browser) and Settings can replay it in a new world. It works on phones and with reduced motion (the camera cuts instead of flying). It only moves the camera, sets the speed and shows captions: the simulation is bit-identical with it on.
 
 **Laptop layout**
 
@@ -400,6 +407,7 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 | C | Charts, family tree and lab log (Session 2) |
 | G | God mode and the Hall of Fame (Session 3) |
 | V | Cinematic camera (Session 3) |
+| M | Mute or unmute (Session 4) |
 | Esc | Put away an armed god-mode tool, stop the cinematic camera, or deselect |
 | H | Hide all panels (screenshot mode) |
 | P | Save a screenshot |
@@ -410,6 +418,8 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 - Creature cap, sprout growth rate, mutation strength and world size.
 - Quality: auto, high, medium or low.
 - Sound starts on at a quiet volume after Begin, with mute and a volume slider (Session 4).
+- Built in Session 4 as a Settings tab in the Lab panel (also the gear button in the top bar): volume and mute, quality, reduced motion, replay the guided story, save and load the whole world as a .json file, and a new world with a seed, creature cap (50-600), sprout growth (×0.5-2), mutation strength (×0.25-3) and world size (small, normal, large). World settings take effect in the next world and are remembered; the usual values leave every config.js number unchanged.
+- The top bar measures itself and steps down until it fits (key hints, then button names, then tighter spacing, then the skill explanation, then the speed buttons on a second row), checked at 1024-1920 px wide.
 - Reduced motion, and New world with an optional seed.
 
 ## 9. Technical architecture
@@ -454,7 +464,9 @@ genesis-lab/
   js/sim/               genome, brain, creature, food, world, species, names, stats, events
   js/render/            renderer, sprites, camera, background, effects
   js/ui/                hud, intro, inspector, brainView, charts, labLog, controls,
-                        settings, godMode, hallOfFame, familyTree
+                        settings, godMode, hallOfFame, familyTree, cinematic,
+                        storyMode, phoneTabs
+  js/sim/save.js        save and load a whole world (Session 4)
   js/audio/sound.js
   js/main.js            starts everything
   assets/               fonts, icons, social-preview.png
@@ -628,16 +640,21 @@ Don't start a session until the gate before it passes. The times are estimates; 
 
 **Session 4 · Polish and launch (2–4 hours)**
 
-- [ ] Intro screen, tips, settings panel and reduced motion
-- [ ] Sound made in code: ambient hum, birth blips, extinction chime and interface clicks, starting quietly after Begin, with a mute button
-- [ ] Phone layout and touch controls
-- [ ] Performance pass and auto quality
-- [ ] Save and load a whole world
-- [ ] README, LICENSE and social preview image
+- [x] Intro screen, tips, settings panel and reduced motion
+- [x] Sound made in code: ambient hum, birth blips, extinction chime and interface clicks, starting quietly after Begin, with a mute button
+- [x] Phone layout and touch controls
+- [x] Performance pass and auto quality
+- [x] Save and load a whole world
+- [x] README, LICENSE and social preview image
 - [ ] Public repo and GitHub Pages (Claude asks before pushing)
-- [ ] Demo GIF and social clip
+- [x] Demo GIF and social clip
+- [x] Added in Session 4: guided story mode (section 8)
 
 **Gate 4:** every item in the launch checklist (section 2) passes, the stranger test passes, and the live link works on your phone. Commit: "Session 4: polish and launch".
+
+**Session 3 feedback (before Session 4).** The new Lab, Cinematic, Champion and Charts buttons pushed the speed buttons off laptop screens. The top bar now measures itself and steps down until it fits (section 8), checked with screenshots at 1024, 1280, 1366, 1440 and 1920 px, with first-minute and wide late-game numbers. Commit: "Session 3 feedback: top bar fits laptop screens".
+
+**Session 4 notes.** The simulation is unchanged: seeds 1-5 × 30 minutes are bit-identical to the Session 3 commit, and every health check in tools/headless.html in Chrome reads exactly as in Session 3: foraging skill doubled in 20 of 20 worlds; steering clearly rose in 17 of 20; the meat-eater gate passed in 4 of seeds 1-5 and 18 of 20 worlds; a clicked adult lived a median of 73 s (20 worlds × 20 minutes) and 64 s (seeds 1-5 × 60 minutes); at most 14% of babies never ate; the population stayed in its band with no floor arrivals after minute 10; the brain-swap check read 0.83, 0.86 and 1.21 at minutes 1, 10 and 30; at minute 60 average top speed was 73-108 per world with no bugs at 140 or more. New in this session: the intro, tips, Settings tab, reduced motion, sound made in code, the phone layout (a slim one-row top bar and bottom tabs Inspector, Charts, Log and World), fixed or automatic quality (phones top out at medium with no lamp shimmer), saving and loading a whole world, and the guided story (section 8). Checks: the story plays 3:04, 3:27 and 3:33 in seeds 8, 12 and 3 (2:52 in seed 8 before the champion chapter was added for fast worlds) and the world it leaves behind is bit-identical to a fresh world stepped the same number of ticks, on a laptop and with the phone cap; a saved and loaded world continues tick for tick like the original (Node and Chrome, about 2.5 MB per file); with about 350 bugs a tick takes about 0.7 ms and a frame draws in under 2 ms in headless Chrome. Open item: at the phone cap of 150, a hunter species (10 or more alive) forms by minute 20 in only 3 of 20 worlds (laptops: 18 of 20), because fewer births mean fewer gut switches; the story then ends by suggesting Predator drop. Raising the gut-switch chance on phones would fix it but changes the simulation, so it waits for your decision. The demo GIF (docs/demo.gif, 20 s, 900 px, 7.5 MB) and the vertical social clip (docs/social-clip.mp4, 26 s, 1080 × 1920, kept out of git) were recorded from the story mode.
 
 ## 12. Copy-paste prompts
 
