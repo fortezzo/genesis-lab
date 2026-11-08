@@ -27,8 +27,96 @@
         <span class="hint" id="stat-hint">how much faster they find food than random brains in the same spots</span>
       </div>
     </div>
+    <div class="tools" role="group" aria-label="Panels">
+      <button id="btn-champion" class="tool" title="Fly to the champion: the living bug with the best score (babies x 3 + minutes alive). Key F">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 12.5h12l1-8-4 3-3-5-3 5-4-3z"/></svg><span>Champion</span><kbd>F</kbd>
+      </button>
+      <button id="btn-charts" class="tool" aria-expanded="false" title="Charts and the lab log. Key C">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 13.5h12M3.5 11V7M7 11V3.5M10.5 11V6M14 11V8.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Charts &amp; log</span><kbd>C</kbd>
+      </button>
+    </div>
     <div class="speeds" id="speeds" role="group" aria-label="Simulation speed"></div>
   </header>
+
+  <!-- Inspector: opens when you click a creature. -->
+  <aside id="inspector" class="panel hidden" aria-label="Selected creature">
+    <div class="insp-head">
+      <span class="swatch"></span>
+      <div class="insp-title">
+        <div id="insp-name" class="insp-name">Specimen</div>
+        <div id="insp-meta" class="insp-meta"></div>
+      </div>
+      <span id="insp-champ" class="badge champ hidden" title="The champion: the best score alive (babies x 3 + minutes alive)">Champion</span>
+      <button id="insp-close" class="icon-btn" aria-label="Close (Esc)" title="Stop following (Esc)">&times;</button>
+    </div>
+    <div id="insp-death" class="insp-death hidden"></div>
+    <div class="insp-scroll">
+      <div class="vitals">
+        <div class="vital" title="Energy: walking, seeing and thinking burn it; eating pays it back. At zero the bug starves.">
+          <span class="label">Energy</span><div class="bar"><div id="insp-energy" class="fill energy-fill"></div></div><span id="insp-energy-v" class="num">0%</span>
+        </div>
+        <div class="vital" title="Health: bites lower it (from Session 3) and it slowly regrows by spending energy.">
+          <span class="label">Health</span><div class="bar"><div id="insp-health" class="fill health-fill"></div></div><span id="insp-health-v" class="num">0%</span>
+        </div>
+        <div class="vital" title="Diet: 0 eats only plants, 1 only meat. In-between diets digest both poorly. Meat-eating arrives in Session 3.">
+          <span class="label">Diet</span><div class="bar diet"><div id="insp-diet" class="diet-mark"></div></div><span id="insp-diet-v" class="num">plants</span>
+        </div>
+      </div>
+
+      <section class="insp-sec brain-sec">
+        <div class="sec-head"><span class="label">Live brain</span><span class="sec-note">25 senses &rarr; 12 neurons &rarr; 6 actions</span></div>
+        <div class="brain-wrap">
+          <canvas id="brain" aria-label="The creature's neural network, firing live"></canvas>
+          <div id="brain-tip" class="tip hidden"></div>
+        </div>
+        <div class="brain-legend">
+          <span><i class="lg exc"></i>excites</span><span><i class="lg calm"></i>calms</span><span><i class="lg pulse"></i>signal</span><span class="dim">hover a neuron</span>
+        </div>
+      </section>
+
+      <section class="insp-sec">
+        <div class="sec-head"><span class="label">What it sees</span><span id="radar-note" class="sec-note"></span></div>
+        <canvas id="radar" aria-label="Radar of the creature's 5 view slices"></canvas>
+        <div class="brain-legend">
+          <span><i class="dot food"></i>food</span><span><i class="dot bug"></i>bugs</span><span><i class="dot wall"></i>glass wall</span><span class="dim">slices light up as it sees food</span>
+        </div>
+      </section>
+
+      <section class="insp-sec">
+        <div class="sec-head"><span class="label">Genes</span><span class="sec-note"><i class="avg-tick"></i>average of all living bugs</span></div>
+        <div id="insp-genes" class="genes"></div>
+      </section>
+
+      <section class="insp-sec">
+        <div class="sec-head"><span class="label">Life</span></div>
+        <div id="insp-life" class="life"></div>
+      </section>
+
+      <section class="insp-sec">
+        <div class="sec-head"><span class="label">Family</span></div>
+        <div id="insp-family" class="family"></div>
+      </section>
+    </div>
+  </aside>
+
+  <!-- Bottom drawer: charts and the lab log. -->
+  <section id="drawer" class="panel hidden" aria-label="Charts and lab log">
+    <div class="drawer-head">
+      <span class="label">Charts</span>
+      <span class="drawer-note">every chart covers the whole run so far &middot; hover for values</span>
+      <button id="drawer-close" class="icon-btn" aria-label="Close charts (C)" title="Close (C)">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div id="charts" class="charts"></div>
+      <div class="log-col">
+        <div class="log-head"><span class="label">Lab log</span><span id="log-count" class="sec-note"></span></div>
+        <ol id="log" class="log" aria-live="polite"></ol>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="panel toast hidden" aria-live="polite"></div>
+  <div id="flash"></div>
 
   <div id="selection" class="panel chip hidden" aria-live="polite">
     <span class="swatch"></span>
@@ -45,7 +133,7 @@
   </div>
 
   <div id="scalebar" aria-hidden="true"><div id="scale-line"></div><span id="scale-label">10 mm</span></div>
-  <div id="hint">Drag to move &middot; Scroll to zoom &middot; Click a creature to follow it &middot; Space to pause</div>
+  <div id="hint">Drag to move &middot; Scroll to zoom &middot; Click a creature to see its brain &middot; C for charts &middot; Space to pause</div>
   <pre id="debug" class="hidden"></pre>
 
   <!-- Classic scripts in order, all under one global namespace: GL. -->
@@ -58,6 +146,7 @@
   <script src="js/sim/genome.js"></script>
   <script src="js/sim/brain.js"></script>
   <script src="js/sim/events.js"></script>
+  <script src="js/sim/story.js"></script>
   <script src="js/sim/stats.js"></script>
   <script src="js/sim/food.js"></script>
   <script src="js/sim/creature.js"></script>
@@ -68,6 +157,10 @@
   <script src="js/render/effects.js"></script>
   <script src="js/render/renderer.js"></script>
   <script src="js/ui/hud.js"></script>
+  <script src="js/ui/brainView.js"></script>
+  <script src="js/ui/inspector.js"></script>
+  <script src="js/ui/charts.js"></script>
+  <script src="js/ui/labLog.js"></script>
   <script src="js/ui/controls.js"></script>
   <script src="js/main.js"></script>
 </body>

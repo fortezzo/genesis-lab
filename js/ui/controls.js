@@ -1,7 +1,8 @@
 // Genesis Lab - interface: mouse, touch and keyboard.
 // Drag to pan, scroll or pinch to zoom, click or tap a creature to select and
 // follow it (click empty soil to let go). Keys: Space pause, 1-5 speeds,
-// Esc deselect, backtick debug overlay.
+// F follow the champion, C charts and lab log, Esc deselect, H hide all panels
+// (screenshot mode), P save a screenshot, backtick debug overlay.
 var GL = GL || {};
 
 GL.Controls = function (app) {
@@ -76,6 +77,11 @@ GL.Controls = function (app) {
     else if (e.key >= '1' && e.key <= String(speeds.length)) { loop.setSpeed(speeds[Number(e.key) - 1]); app.hud.refreshSpeeds(); }
     else if (e.key === 'Escape') { app.hud.dismissDeath(); app.renderer.select(null); app.hud.update(0, true); }
     else if (e.key === '`' || e.code === 'Backquote') app.hud.toggleDebug();
+    else if (e.ctrlKey || e.metaKey || e.altKey) return;           // leave browser shortcuts alone
+    else if (e.code === 'KeyF') app.hud.followChampion();
+    else if (e.code === 'KeyC') app.hud.toggleDrawer();
+    else if (e.code === 'KeyH') { app.hud.toggleClean(); app.layoutChanged(); }
+    else if (e.code === 'KeyP') app.hud.screenshot();
     else return;
     interacted();
   });

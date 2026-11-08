@@ -1,8 +1,27 @@
 // Genesis Lab - interface: heads-up display.
-// The top bar (generation, population, foraging skill, speed buttons), the
-// "following" chip for the selected creature (and what happened if it dies),
+// The top bar (generation, population, foraging skill, champion and charts buttons,
+// speed buttons) with numbers that count smoothly to new values, the "it died" logic
+// for the followed bug (shown in the inspector), screenshot mode (H), screenshots (P),
 // the scale bar in millimetres, a first-time hint and the debug overlay (backtick key).
 var GL = GL || {};
+
+// A number that counts smoothly to its new value instead of jumping. It only touches
+// the page when the text it shows actually changes.
+GL.Ticker = function (el, decimals) {
+  this.el = el; this.decimals = decimals || 0; this.started = false; this.value = 0; this.target = 0; this.text = '';
+};
+GL.Ticker.prototype.set = function (v) {
+  this.target = v;
+  if (!this.started) { this.started = true; this.value = v; }
+};
+GL.Ticker.prototype.update = function (dt) {
+  var k = 1 - Math.exp(-GL.Config.ui.tickerEase * dt), d = this.target - this.value;
+  var unit = Math.pow(10, -this.decimals);
+  this.value = Math.abs(d) < unit * 0.5 ? this.target : this.value + d * k;
+  var shown = this.decimals ? this.value : (d > 0 ? Math.floor(this.value + 0.5) : Math.ceil(this.value - 0.5));
+  var text = shown.toFixed(this.decimals);
+  if (text !== this.text) { this.text = text; this.el.textContent = text; }
+};
 
 GL.HUD = function (app) {
   this.app = app;
@@ -17,6 +36,7 @@ GL.HUD = function (app) {
   this.textTimer = 0;
   this.lastScaleZoom = 0;
   this.death = null;           // when the followed bug dies: { record, next, label, until }
+  this.tickers = { gen: new GL.Ticker(this.el.gen, 0), pop: new GL.Ticker(this.el.pop, 0), skill: new GL.Ticker(this.el.skill, 1) };
   this.buildSpeedButtons();
   var self = this;
   this.el.chipClose.addEventListener('click', function () { self.dismissDeath(); app.renderer.select(null); self.update(0, true); });
@@ -24,7 +44,10 @@ GL.HUD = function (app) {
   this.el.chipFollow.addEventListener('click', function () { self.followNext(); });
   window.addEventListener('resize', function () { self.placeChip(); });
   this.placeChip();
-  setTimeout(function () { self.hideHint(); }, 14000);
+  document.getElementById('btn-champion').addEventListener('click', function () { self.followChampion(); });
+  document.getElementById('btn-charts').addEventListener('click', function () { self.toggleDrawer(); });
+  document.getElementById('drawer-close').addEventListener('click', function () { self.toggleDrawer(false); });
+  setTimeout(function () { self.hideHint(); }, GL.Config.ui.hintSeconds * 1000);
 };
 
 GL.HUD.prototype = {
@@ -68,7 +91,57 @@ GL.HUD.prototype = {
   // Keep the chip just under the top bar, however tall the bar is (it wraps on narrow screens).
   placeChip: function () {
     var r = this.el.topbar.getBoundingClientRect();
-    if (r.height > 0) this.el.chip.style.top = Math.round(r.bottom + 8) + 'px';
+    if (r.height > 0) {
+      this.el.chip.style.top = Math.round(r.bottom + 8) + 'px';
+      document.documentElement.style.setProperty('--top-h', Math.round(r.bottom) + 'px');   // the inspector starts below the bar
+    }
+  },
+
+  // ------------------------------------------------------------ panels and modes
+  toggleDrawer: function (on) {
+    var app = this.app, el = document.getElementById('drawer'), btn = document.getElementById('btn-charts');
+    on = on === undefined ? el.classList.contains('hidden') : on;
+    el.classList.toggle('hidden', !on);
+    document.body.classList.toggle('drawer-open', on);
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    app.charts.setOpen(on);
+    app.labLog.drawerOpen = on;
+    if (on) this.hideHint();
+    app.layoutChanged();
+  },
+
+  // Screenshot mode: hide every panel (H). The terrarium keeps running.
+  toggleClean: function () {
+    var on = document.body.classList.toggle('clean');
+    this.hideHint();
+    return on;
+  },
+
+  // Save what the terrarium looks like right now as a PNG (P).
+  screenshot: function () {
+    var app = this.app, canvas = app.renderer.canvas, flash = document.getElementById('flash');
+    var t = Math.floor(app.world.time), name = 'genesis-lab-seed' + app.world.seed + '-' + Math.floor(t / 60) + 'm' + (t % 60) + 's.png';
+    canvas.toBlob(function (blob) {
+      if (!blob) return;
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    }, 'image/png');
+    flash.classList.add('on');
+    requestAnimationFrame(function () { requestAnimationFrame(function () { flash.classList.remove('on'); }); });
+    if (!document.body.classList.contains('clean')) app.labLog.showToast({ text: 'Screenshot saved to your downloads: ' + name, kind: 'info' });
+  },
+
+  // Fly to the champion: the living bug with the best score (babies x 3 + minutes alive).
+  followChampion: function () {
+    var app = this.app, c = app.world.findById(app.world.stats.championId);
+    this.hideHint();
+    if (!c) return;
+    this.dismissDeath();
+    app.renderer.select(c);
+    this.update(0, true);
   },
 
   update: function (dt, force) {
@@ -78,13 +151,17 @@ GL.HUD.prototype = {
       this._shownSpeed = loop.speed; this._shownPaused = loop.paused;
       this.refreshSpeeds();                    // keep the buttons in step however the speed changed
     }
+    var app = this.app, world = app.world, s = world.stats, tk = this.tickers;
+    tk.gen.set(s.maxGenerationEver);             // the highest generation ever reached: it never goes down
+    tk.pop.set(world.creatures.length);
+    tk.skill.set(s.skill);
+    tk.gen.update(dt); tk.pop.update(dt); tk.skill.update(dt);
+    // Save frame rate on slow devices: panels drop their live blur at low drawing quality.
+    var lite = app.renderer.quality.level < GL.Config.render.liteGlassBelowLevel;
+    if (lite !== this._lite) { this._lite = lite; document.body.classList.toggle('lite', lite); }
     this.textTimer -= dt;
     if (this.textTimer > 0 && !force) return;
     this.textTimer = 0.25;                     // text refreshes 4 times a second
-    var app = this.app, world = app.world, s = world.stats;
-    this.el.gen.textContent = s.maxGenerationEver;   // the highest generation ever reached: it never goes down
-    this.el.pop.textContent = world.creatures.length;
-    this.el.skill.textContent = s.skill.toFixed(1);
     if (s.startSkill > 0) {
       var up = s.skill >= s.startSkill;
       this.el.trend.textContent = (up ? '▲' : '▼') + ' from ' + s.startSkill.toFixed(1) + '×';
@@ -110,7 +187,8 @@ GL.HUD.prototype = {
     el.chip.classList.remove('dead');
     el.chipActions.classList.add('hidden');
     el.chipEnergy.parentNode.classList.remove('hidden');
-    if (!c) { el.chip.classList.add('hidden'); return; }
+    // The inspector shows the selected bug (and what happened if it dies), so the chip stays hidden.
+    if (!c || this.app.inspector) { el.chip.classList.add('hidden'); return; }
     el.chip.classList.remove('hidden');
     el.chip.style.setProperty('--hue', Math.round(c.hue));
     el.chipName.textContent = 'Specimen #' + c.id;
@@ -132,7 +210,7 @@ GL.HUD.prototype = {
     this.death = { record: rec, until: performance.now() + GL.Config.render.followNextSeconds * 1000, next: null, label: '' };
     this.app.renderer.markDeath(rec);
     var el = this.el;
-    el.chip.classList.remove('hidden');
+    if (!this.app.inspector) el.chip.classList.remove('hidden');
     el.chip.classList.add('dead');
     el.chip.style.setProperty('--hue', Math.round(rec.hue));
     el.chipName.textContent = 'Specimen #' + rec.id + ' ' + how + ' at age ' + this.clock(rec.age);
@@ -240,7 +318,9 @@ GL.HUD.prototype = {
       'grid cells ' + w.creatureGrid.usedCells() + ' creature, ' + w.foodGrid.usedCells() + ' food\n' +
       'sim time   ' + Math.floor(t / 60) + ':' + ((t % 60) < 10 ? '0' : '') + (t % 60) + '\n' +
       'seed       ' + w.seed + '\n' +
-      'quality    ' + q +
+      'quality    ' + q + (this._lite ? ' (panels without blur)' : '') + '\n' +
+      'panels     ' + (app.inspector && app.inspector.open ? 'inspector ' : '') + (app.charts && app.charts.open ? 'charts' : '') + '\n' +
+      'champion   #' + w.stats.championId + ' (score ' + w.stats.championScore.toFixed(1) + ')' +
       (r.getSelected() ? '\nselected   view slices shown in the terrarium' : '');
   }
 };

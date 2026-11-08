@@ -580,15 +580,17 @@ Don't start a session until the gate before it passes. The times are estimates; 
 
 **Session 2 · See inside their minds (2–3 hours)**
 
-- [ ] Inspector with genes, bars, stats, and parent and children links
-- [ ] Live brain viewer: labeled inputs and outputs, glowing neurons, traveling pulses
-- [ ] Radar of the 5 view slices
-- [ ] Charts drawer: population, average traits, foraging skill, births and deaths
-- [ ] Lab log: records, booms and crashes
-- [ ] Keyboard shortcuts, champion and follow mode
-- [ ] Frosted-glass panels, fonts and smooth number tickers
+- [x] Inspector with genes, bars, stats, and parent and children links
+- [x] Live brain viewer: labeled inputs and outputs, glowing neurons, traveling pulses
+- [x] Radar of the 5 view slices
+- [x] Charts drawer: population, average traits, foraging skill, births and deaths
+- [x] Lab log: records, booms and crashes
+- [x] Keyboard shortcuts, champion and follow mode
+- [x] Frosted-glass panels, fonts and smooth number tickers
 
 **Gate 2:** clicking a creature makes you say "whoa", the charts clearly show foraging rising, and open panels don't drop the frame rate. Commit: "Session 2: inspector, brain viewer, charts".
+
+**Session 2 notes.** The simulation is unchanged: the same seeds give bit-identical results before and after (checked on 5 worlds × 30 minutes), and the gate still gives ×4.95, ×6.34 and ×4.87 in seeds 1–3. Small additions beyond this plan: the C key and a top-bar button open the charts drawer (which also holds the lab log); F and a Champion button fly to the champion, who wears a small gold crown; the selected bug's field of view is drawn faintly on the soil, lighting green where it sees food; hovering a neuron highlights its connections and says, in words, what is exciting or calming it; a new lab log line shows briefly at the bottom while the drawer is closed, and log lines about a living specimen can be clicked to fly to it; the "it died" notice moved from the top chip into the inspector, where the dead bug's brain goes dark. Species names, species colours in the population chart and "average of its species" in the inspector wait for Session 3's species; until then genes are compared with the average of all living bugs. If drawing quality drops on a slow device, the panels give up their live blur (solid glass) to protect the frame rate.
 
 **Session 3 · Predators, species and god mode (2–3 hours)**
 

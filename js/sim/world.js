@@ -29,6 +29,7 @@ GL.World = (function () {
 
     this.events = new GL.Events(4096);
     this.stats = new GL.Stats();
+    this.story = new GL.Story(this);     // writes the lab log (reads the world only)
 
     // Creature pool: objects made once, reused forever.
     var poolSize = Math.max(C.capLaptop, C.capPhone, this.cap) + 8;
@@ -69,6 +70,7 @@ GL.World = (function () {
     for (i = 0; i < C.sproutStart; i++) this.food.spawnSprout(this);
     for (i = 0; i < C.startCreatures; i++) this.spawnPrimitive(false);
     this.stats.sample(this);
+    this.story.begin();
   }
 
   World.prototype = {
@@ -234,6 +236,7 @@ GL.World = (function () {
       c.alive = false;
       c.deathCause = cause;
       this.stats.onDeath(cause, c);
+    this.story.onDeath(c);
       if (c.id === this.watchId) {           // the followed creature died: keep a record for the interface
         this.watchDeath = { id: c.id, cause: cause, age: c.age, x: c.x, y: c.y, hue: c.hue, radius: c.radius,
                             generation: c.generation, babies: c.babies, foodEaten: c.foodEaten, time: this.time,
@@ -304,7 +307,7 @@ GL.World = (function () {
         if (!this.stats.belowFloor) {
           this.stats.belowFloor = true;
           this.stats.onFloorEpisode();
-          this.events.note(this.time, 'Population fell below ' + this.floor + ': primitive creatures are wandering in');
+          this.story.note('Population fell below ' + this.floor + ': primitive creatures with random brains are wandering in.', 'warn');
         }
         this.floorTimer += dt;
         if (this.floorTimer >= C.floorSpawnInterval) { this.floorTimer = 0; this.spawnPrimitive(true); }
@@ -323,6 +326,7 @@ GL.World = (function () {
 
       // 8. Stats every half simulated second.
       if (this.tick % C.statsIntervalTicks === 0) this.stats.sample(this);
+      this.story.update();
     },
 
     // Find a living creature by its id (or null).

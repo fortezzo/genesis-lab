@@ -1,0 +1,8 @@
+Fonts bundled with Genesis Lab (latin subset, variable weight, woff2), all under the
+SIL Open Font License 1.1 (full text in OFL-Inter.txt; the same license applies to each):
+
+- Inter.woff2          Inter, copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+- SpaceGrotesk.woff2   Space Grotesk, copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)
+- JetBrainsMono.woff2  JetBrains Mono, copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+
+Downloaded from Google Fonts and stored in the project, so the app works offline with no outside requests.

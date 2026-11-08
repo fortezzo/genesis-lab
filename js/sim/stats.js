@@ -59,8 +59,12 @@ GL.Stats = function () {
   this.resetMinute();
 
   // Sample history for charts (Session 2): plain arrays of numbers.
+  // births and deaths are running totals (the charts turn them into per-minute rates).
   this.history = { time: [], population: [], sprouts: [], skill: [], adultRate: [], ghostRate: [], foodRate: [], steer: [],
-                   speed: [], size: [], sight: [], diet: [] };
+                   steerLuck: [], speed: [], size: [], sight: [], diet: [], turn: [],
+                   births: [], starvation: [], oldAge: [], eaten: [], disaster: [] };
+  this.championId = 0;         // the living creature with the best score: babies x 3 + minutes alive
+  this.championScore = 0;
 
   this.population = 0;
   this.maxGeneration = 0;      // deepest family line among the living (can go down when a line dies out)
@@ -108,8 +112,11 @@ GL.Stats.prototype = {
     // food, how many are pointed at it (within steerConeDeg either side of straight ahead)?
     var maxGen = 0, genSum = 0, sp = 0, sp2 = 0, fast = 0, tu = 0, sz = 0, si = 0, di = 0;
     var cone = C.steerConeDeg * Math.PI / 180, seen = 0, hit = 0, luck = 0;
+    var champ = 0, champScore = -1, bw = C.championBabyWeight, mw = C.championMinuteWeight / 60;
     for (i = 0; i < n; i++) {
       var c = list[i];
+      var score = c.babies * bw + c.age * mw;
+      if (score > champScore) { champScore = score; champ = c.id; }
       if (c.generation > maxGen) maxGen = c.generation;
       genSum += c.generation;
       var spd = c.genes[G.SPEED];
@@ -123,6 +130,7 @@ GL.Stats.prototype = {
       }
     }
     this.maxGeneration = maxGen;
+    this.championId = champ; this.championScore = champScore > 0 ? champScore : 0;
     if (maxGen > this.maxGenerationEver) this.maxGenerationEver = maxGen;
     this.avgGeneration = n ? genSum / n : 0;
     if (seen > 0) { this.steer = hit / seen; this.steerLuck = luck / seen; }
@@ -201,15 +209,18 @@ GL.Stats.prototype = {
     var hist = this.history;
     hist.time.push(world.time); hist.population.push(n); hist.sprouts.push(world.food.sproutCount);
     hist.skill.push(this.skill); hist.adultRate.push(this.adultRate); hist.ghostRate.push(this.ghostRate);
-    hist.foodRate.push(this.foodRate); hist.steer.push(this.steer);
+    hist.foodRate.push(this.foodRate); hist.steer.push(this.steer); hist.steerLuck.push(this.steerLuck);
     hist.speed.push(n ? sp / n : 0); hist.size.push(n ? sz / n : 0);
-    hist.sight.push(n ? si / n : 0); hist.diet.push(n ? di / n : 0);
+    hist.sight.push(n ? si / n : 0); hist.diet.push(n ? di / n : 0); hist.turn.push(n ? tu / n : 0);
+    hist.births.push(this.births); hist.starvation.push(this.deaths.starvation); hist.oldAge.push(this.deaths.oldAge);
+    hist.eaten.push(this.deaths.eaten); hist.disaster.push(this.deaths.disaster);
     if (hist.time.length > C.statsHistoryMax) {
       for (var key in hist) {
         var arr = hist[key], out = [];
         for (i = 0; i < arr.length; i += 2) out.push(arr[i]);
         hist[key] = out;
       }
+      this.historyThinned = (this.historyThinned || 0) + 1;   // lets the charts know old samples moved
     }
   }
 };

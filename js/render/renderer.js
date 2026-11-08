@@ -156,6 +156,7 @@ GL.Renderer.prototype = {
     this.effects.draw(ctx, cam);
     var sel = this.getSelected();
     if (sel) this.drawSelection(ctx, cam, sel);
+    this.drawChampion(ctx, cam, sel);
     if (this.deathMark) this.drawDeathMark(ctx, cam);
     this.background.drawGlass(ctx, cam);
 
@@ -464,7 +465,47 @@ GL.Renderer.prototype = {
     ctx.strokeStyle = 'rgba(34, 229, 255,' + (0.18 + 0.12 * Math.sin(t * 3)) + ')';
     ctx.beginPath(); ctx.arc(c.x, c.y, r * 1.25, 0, M.TAU); ctx.stroke();
     if (this.debug) this.drawViewSlices(ctx, cam, c);
+    else this.drawViewCone(ctx, cam, c);
     ctx.globalCompositeOperation = 'source-over';
+  },
+
+  // The selected bug's field of view, faint on the soil; slices that see food glow green
+  // (the same picture as the radar in the inspector).
+  drawViewCone: function (ctx, cam, c) {
+    var R = GL.Config.render, IN = GL.Brain.IN, half = c.fov / 2, w = c.fov / 5, gain = GL.Config.foodSenseGain;
+    for (var s = 0; s < 5; s++) {
+      var a0 = c.heading - half + s * w, f = c.inputs[IN.FOOD + s] / gain;
+      if (f <= 0.01) continue;
+      ctx.fillStyle = 'rgba(102, 221, 79,' + (R.viewConeFoodAlpha * f) + ')';
+      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.sight, a0, a0 + w); ctx.closePath(); ctx.fill();
+    }
+    var g = ctx.createRadialGradient(c.x, c.y, c.radius, c.x, c.y, c.sight);
+    g.addColorStop(0, 'rgba(34, 229, 255,' + R.viewConeAlpha + ')'); g.addColorStop(1, 'rgba(34, 229, 255, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.sight, c.heading - half, c.heading + half); ctx.closePath(); ctx.fill();
+  },
+
+  // A small gold crown floating over the champion (the best score alive), so F has something to find.
+  drawChampion: function (ctx, cam, sel) {
+    var w = this.world, id = w.stats.championId, c = this._champ;
+    if (!c || !c.alive || c.id !== id) c = this._champ = id ? w.findById(id) : null;
+    if (!c) return;
+    var v = this.view;
+    if (c.x < v.x0 || c.x > v.x1 || c.y < v.y0 || c.y > v.y1) return;
+    var z = cam.zoom, s = 7 / z, bob = this.reducedMotion ? 0 : Math.sin(this.time * 2.2) * 1.5 / z;
+    var x = c.x, y = c.y - Math.max(c.radius * 2.6, (sel === c ? 26 : 16) / z) + bob;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = GL.Config.render.championMarkAlpha;
+    var gs = s * 4;
+    ctx.drawImage(GL.Sprites.glow(40, 1, 0.6), x - gs / 2, y - gs / 2, gs, gs);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.beginPath();
+    ctx.moveTo(x - s, y + s * 0.55); ctx.lineTo(x - s, y - s * 0.35); ctx.lineTo(x - s * 0.5, y + s * 0.05);
+    ctx.lineTo(x, y - s * 0.6); ctx.lineTo(x + s * 0.5, y + s * 0.05); ctx.lineTo(x + s, y - s * 0.35); ctx.lineTo(x + s, y + s * 0.55);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255, 214, 128, 0.95)'; ctx.fill();
+    ctx.lineWidth = 1 / z; ctx.strokeStyle = 'rgba(80, 50, 10, 0.8)'; ctx.stroke();
   },
 
   // Debug overlay: the selected creature's 5 view slices, shaded by what it sees.

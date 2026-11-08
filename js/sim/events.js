@@ -14,8 +14,9 @@ GL.Events = function (capacity) {
   this.r = new Float32Array(this.cap);
   this.id = new Int32Array(this.cap);
   this.seq = 0;          // how many records have ever been written
-  this.log = [];         // notable moments: { time, text }
-  this.logMax = 300;
+  this.log = [];         // notable moments for the lab log: { time, text, kind, id, gen, n }
+  this.logMax = (GL.Config.story && GL.Config.story.logMax) || 300;
+  this.logCount = 0;     // lines ever written (the lab log uses it to spot new lines)
 };
 
 GL.Events.BIRTH = 1;     // a baby was born
@@ -30,8 +31,10 @@ GL.Events.prototype = {
     this.hue[i] = hue; this.r[i] = r; this.id[i] = id;
     this.seq++;
   },
-  note: function (time, text) {
-    this.log.push({ time: time, text: text });
+  // kind: 'info', 'boom', 'crash', 'record', 'gen', 'skill' or 'warn'; id: a specimen the line is about (0 = none).
+  note: function (time, text, kind, id, gen) {
+    this.logCount++;
+    this.log.push({ time: time, text: text, kind: kind || 'info', id: id || 0, gen: gen || 0, n: this.logCount });
     if (this.log.length > this.logMax) this.log.splice(0, this.log.length - this.logMax);
   }
 };

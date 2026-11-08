@@ -288,6 +288,68 @@ GL.Config = {
     followNextSeconds: 6,    // when the followed bug dies, switch to its child or nearest relative after this
                              // many real seconds (unless the viewer chooses first)
     deathMarkSeconds: 10,    // the marker where the followed bug died fades out over this many seconds
-    scaleBarPx: 120          // the scale bar aims to be about this many pixels long
+    scaleBarPx: 120,         // the scale bar aims to be about this many pixels long
+    viewConeAlpha: 0.10,     // the selected bug's field of view is drawn faintly on the soil, this bright...
+    viewConeFoodAlpha: 0.22, // ...and each view slice that sees food lights up green by up to this much
+    championMarkAlpha: 0.7,  // brightness of the small crown marker over the champion
+    liteGlassBelowLevel: 1   // at a drawing quality below this (0 = low), panels drop their blur to save frame rate
+  },
+
+  // ------------------------------------------------------------- champion
+  championBabyWeight: 3,     // champion score = babies x this + minutes alive (PLAN.md section 6)
+  championMinuteWeight: 1,
+
+  // ------------------------------------------------------------- lab log (the story engine, js/sim/story.js)
+  story: {
+    checkEverySec: 1,        // how often the story engine looks for news (simulated seconds)
+    firstBoomPop: 150,       // the first boom is logged when the population first reaches this many bugs
+    swingShare: 0.30,        // a boom or crash is logged when the population rises or falls by this share...
+    swingMinBugs: 60,        // ...and by at least this many bugs, from its last low or high point
+    recordMinAge: 180,       // a lifespan record is only news once a bug lived at least this many seconds...
+    recordAgeStep: 10,       // ...and beat the old record by at least this many seconds (lives end by 5:00)
+    recordMinBabies: 5,      // a babies record is news once a bug had at least this many babies
+    recordGap: 45,           // at most one record line per this many simulated seconds (better ones wait their turn)
+    generationMilestones: [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000], // generations worth a log line
+    skillMilestones: [1.5, 2, 3, 4, 5, 6, 8, 10],   // foraging skill levels (x random brains) worth a log line
+    skillFromSec: 120,       // skill milestones are only logged after this many seconds (the first minute is the baseline)
+    logMax: 300              // lines kept in the lab log
+  },
+
+  // ------------------------------------------------------------- interface panels
+  ui: {
+    tickerEase: 8,           // how quickly the top-bar numbers count to their new value (per second)
+    inspectorRefresh: 0.2,   // seconds between inspector text and bar updates (the brain viewer runs every frame)
+    familyRefresh: 1,        // seconds between refreshes of the parent and children links
+    childrenShown: 8,        // most living children listed as links
+    chartRefresh: 0.5,       // seconds between chart redraws while the drawer is open
+    chartMinutesShown: 0,    // 0 = charts show the whole run; otherwise only the last this many minutes
+    chartSmoothSec: 10,      // steering is sampled every half second; its chart shows a rolling average over this many seconds
+    skillChartFromSec: 30,   // the foraging-skill chart starts here: before that, too few hungry moments to measure
+    toastSeconds: 6,         // a new lab log line shows briefly near the bottom when the drawer is closed
+    hintSeconds: 14,         // the first-time hint fades after this many seconds
+
+    // Brain viewer (the showpiece).
+    brainSmoothing: 14,      // how quickly the drawn neuron activity follows the real activity (per second),
+                             // so it glows smoothly instead of flickering at high speed
+    brainLinkAlpha: 0.10,    // brightness of the faint wiring (every connection, by strength)
+    brainActiveLinks: 70,    // the strongest live signals are drawn bright on top of the wiring...
+    brainActiveAlpha: 0.85,  // ...this bright at full strength
+    brainPulseMax: 160,      // signal pulses travelling along the connections at once
+    brainPulseRate: 5,       // pulses per second sent along a connection carrying a full-strength signal
+    brainPulseSpeed: 1.1,    // how fast a pulse crosses a connection (lengths per second)
+    brainPulseMinSignal: 0.12, // weaker signals than this send no pulses
+    brainNodeRadius: 5.5,    // neuron size in the viewer (CSS pixels)
+    brainFoodScale: 8,       // food inputs run 0..foodSenseGain; the viewer shows them as a share of this
+
+    // Chart colours: checked with a colour-blind-safety validator on the panel colour.
+    chartEvolved: '#169DB3', // foraging skill chart: evolved bugs
+    chartGhost: '#6F86A6',   // ...and random brains (the dashed grey reference line)
+    chartPop: '#169DB3',     // population
+    chartTraits: ['#169DB3', '#C47F0E', '#9474E6', '#DE5089'], // speed, size, sight, diet
+    chartBirths: '#2EA862',  // births per minute (a line)
+    chartDeaths: { starvation: '#C47F0E', oldAge: '#9474E6', eaten: '#DE5089', disaster: '#169DB3' }, // deaths (stacked)
+    chartSteer: '#169DB3',   // steering
+    chartGrid: 'rgba(140, 200, 255, 0.08)', // faint chart grid lines
+    chartAxis: '#8FA6C4'     // axis labels
   }
 };
