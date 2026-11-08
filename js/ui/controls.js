@@ -1,6 +1,6 @@
 // Genesis Lab - interface: mouse, touch and keyboard.
 // Drag to pan, scroll or pinch to zoom, click or tap a creature to select and
-// follow it (click empty water to let go). Keys: Space pause, 1-5 speeds,
+// follow it (click empty soil to let go). Keys: Space pause, 1-5 speeds,
 // Esc deselect, backtick debug overlay.
 var GL = GL || {};
 
@@ -48,7 +48,7 @@ GL.Controls = function (app) {
     canvas.classList.remove('grabbing');
     if (wasClick && e.type === 'pointerup') {
       var c = app.renderer.pick(e.clientX, e.clientY);
-      app.renderer.select(c);                    // empty water = deselect
+      app.renderer.select(c);                    // empty soil = deselect
       app.hud.update(0, true);
     }
     if (count === 1) {                           // one finger left after a pinch: keep panning smoothly

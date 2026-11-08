@@ -21,7 +21,7 @@ GL.Events = function (capacity) {
 GL.Events.BIRTH = 1;     // a baby was born
 GL.Events.DEATH = 2;     // a creature died
 GL.Events.EAT = 3;       // a creature ate a piece of food
-GL.Events.ARRIVAL = 4;   // a primitive creature drifted in (population floor)
+GL.Events.ARRIVAL = 4;   // a primitive creature wandered in (population floor)
 
 GL.Events.prototype = {
   push: function (type, x, y, hue, r, id) {

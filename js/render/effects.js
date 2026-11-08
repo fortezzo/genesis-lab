@@ -1,6 +1,6 @@
 // Genesis Lab - drawing: effects.
 // A ring flash at every birth, a burst of particles at every death and a small
-// sparkle when algae is eaten. Everything comes from one fixed pool, so no new
+// green sparkle when a sprout is eaten. Everything comes from one fixed pool, so no new
 // objects are made while the app runs. Effects play in real time, whatever the speed.
 var GL = GL || {};
 
@@ -86,7 +86,7 @@ GL.Effects.prototype = {
         ctx.lineWidth = Math.max(1.2 / z, this.size[i] * 0.18 * (1 - t));
         ctx.beginPath(); ctx.arc(x, y, r, 0, M.TAU); ctx.stroke();
       } else {
-        var img = kind === GL.Effects.SPARKLE ? S.algae() : S.glow(this.hue[i], 1, 0.62);
+        var img = kind === GL.Effects.SPARKLE ? S.sproutGlow() : S.glow(this.hue[i], 1, 0.62);
         var s = this.size[i] * (kind === GL.Effects.SPARKLE ? (1 + t * 1.5) : (1.6 - t * 0.6)) * 2;
         s = Math.max(s, 3 / z);
         ctx.globalAlpha = kind === GL.Effects.SPARKLE ? 0.5 * (1 - t) : (1 - t);

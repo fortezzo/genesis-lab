@@ -10,8 +10,8 @@ Genesis Lab is a browser ecosystem where creatures with neural-network brains ev
 | --- | --- |
 | What | A living ecosystem in the browser where creatures with neural-network brains evolve by themselves |
 | Name | Genesis Lab |
-| World | A microscopic ocean inside a circular lab culture dish |
-| Look | Neon cyan and green life on deep navy; predators glow magenta-red |
+| World | A round glass lab terrarium seen from directly above, under dim lab lighting |
+| Look | Glowing cyan-to-blue bugs and green sprouts on navy-tinted soil; predators glow magenta-red |
 | Runs on | Any modern browser, laptop or phone, with no install, accounts or API keys |
 | Built with | Plain JavaScript and HTML Canvas, with the neural networks written from scratch |
 | Live link after launch | fortezzo.github.io/genesis-lab |
@@ -27,7 +27,7 @@ Genesis Lab should make people ask "how did you build that?" within 10 seconds o
 
 **The three jaw-drop moments**
 
-1. **The first 10 seconds:** the screen fades in on a glowing microscopic ocean that already looks expensive.
+1. **The first 10 seconds:** the screen fades in on a dim glass terrarium full of glowing bugs that already looks expensive.
 2. **Minute 5:** creatures that bumped into walls now beeline for food, and nobody taught them.
 3. **The click:** select any creature and its brain opens up, neurons firing live as it hunts.
 
@@ -57,15 +57,15 @@ After that, predators appear by themselves, species rise and go extinct, and the
 
 ## 3. How it works, in plain English
 
-Picture a drop of seawater under a microscope, sped up a million times: nobody designs the behavior, and the world selects it.
+Picture a glass terrarium on a lab bench, sped up a million times: nobody designs the behavior, and the world selects it.
 
 **The life loop** (drawn as a diagram in the online doc):
 
 ```text
 Start: 60 random creatures
-  -> 1 See:       5 view slices spot food, creatures and the dish edge
+  -> 1 See:       5 view slices spot food, creatures and the glass wall
   -> 2 Think:     a neural network turns senses into decisions
-  -> 3 Act:       swim, turn, bite, or try to have a baby
+  -> 3 Act:       walk, turn, bite, or try to have a baby
   -> 4 Survive:   moving and thinking cost energy; eating pays it back
                   (energy runs out -> the creature dies and makes room for others)
   -> 5 Reproduce: well-fed adults split off a baby that copies them
@@ -82,12 +82,14 @@ Most random changes do nothing or hurt. Now and then a baby is slightly better a
 
 ## 4. The world
 
-The dish is a 4,000-unit-wide circle of water where algae grows near drifting nutrient vents, and the population stays between 20 and 400 creatures.
+The terrarium is a 4,000-unit-wide circle of soil where sprouts grow under drifting heat lamps, and the population stays between 20 and 400 creatures.
 
-**The dish**
+**The terrarium**
 
-- A circular culture dish, 2,000 units in radius, with a soft wall: creatures that touch the edge are pushed back and burn extra energy.
-- A microscope scale bar (for example "100 µm") updates as you zoom, for a real-lab feel.
+- A round glass lab terrarium, 2,000 units in radius, seen from directly above under dim lab lighting. One unit is 0.1 mm, so the terrarium is 40 cm across and a typical bug is about 2 mm long.
+- The floor is dark soil with patches of moss, tinted toward the navy palette.
+- The glass wall is the edge, and it's a soft wall: creatures that touch it are pushed back and burn extra energy.
+- A scale bar in millimeters (for example "10 mm") updates as you zoom, for a real-lab feel.
 
 **Time**
 
@@ -95,43 +97,44 @@ The dish is a 4,000-unit-wide circle of water where algae grows near drifting nu
 - Speeds: pause, 1x, 2x (the default), 4x, 16x and Max, which runs as many ticks as fit in about 12 ms per frame.
 - Every world has a seed number. The same seed and settings always give the same starting world.
 
-**Water and currents**
+**Still air**
 
-- A slow, swirling current made from smooth noise drifts food and nudges creatures, so the dish feels alive before anything evolves.
+- There are no currents. Food stays exactly where it grows, and creatures move only by walking.
 
-**Nutrient vents**
+**Heat lamps over nutrient pads**
 
-- 4 vents drift slowly around the dish. Algae grows fastest near a vent and rarely in open water.
-- This creates geography: crowded feeding grounds, empty stretches, and migrations as the vents move.
+- 4 heat lamps shine warm pools of light onto nutrient pads. Sprouts grow fastest in a lamp's pool and rarely on open soil.
+- The lamps drift slowly around the terrarium, and each one waxes and wanes in strength.
+- This creates geography: crowded feeding grounds, empty stretches, and migrations as the lamps move.
 
 **Food**
 
 | Food | Where it comes from | Energy | Behavior |
 | --- | --- | --- | --- |
-| Algae | Grows near vents, up to 1,500 pieces at once | 25 | Pulses softly and drifts with the current |
+| Sprouts | Grow under the heat lamps, up to 1,500 at once | 25 | Grow in, sway softly, stay where they grew, and wither after 2 minutes if nobody eats them |
 | Meat | Left behind when a creature dies (from Session 3) | Most of the dead creature's stored energy | Glows amber and decays after 60 seconds |
 
-- **A sparse start:** a new world begins with only 60 pieces of algae (`algaeStart: 60`), so the first random creatures have to find food instead of bumping into it.
-- **Wide, thin feeding grounds:** algae grows in clouds about 700 units wide around each vent (`ventSpread: 700`), and 20% of new algae appears in open water (`algaeOpenWaterChance: 0.2`).
-- Algae regrows at up to 26 pieces per second when the dish is bare, slowing as it fills (`algaeGrowthRate: 26`). More is not better: a faster rate refills the dish during the first minute, random swimmers find food by luck, and the learning curve flattens.
+- **A sparse start:** a new world begins with only 60 sprouts (`sproutStart: 60`), so the first random creatures have to find food instead of bumping into it.
+- **Wide, thin feeding grounds:** sprouts grow in patches about 700 units wide around each lamp (`lampSpread: 700`), and 20% of new sprouts come up on open soil (`sproutOpenGroundChance: 0.2`).
+- Sprouts regrow at up to 26 per second when the terrarium is bare, slowing as it fills (`sproutGrowthRate: 26`). More is not better: a faster rate refills the terrarium during the first minute, random walkers find food by luck, and the learning curve flattens.
 
 **Population limits**
 
 - Start: 60 random creatures.
-- Floor: below 20 creatures, new primitive creatures drift in, so the world never dies. The lab log records each arrival.
-- Settling in: every primitive creature (the 60 starters and each drift-in) arrives with a 90% full tank (`startEnergy: 0.9`) but must wait 30 seconds before it can have a baby (`primitiveSettleTime: 30`). This keeps minute 1 a fair measure of random brains, instead of one lucky family multiplying.
+- Floor: below 20 creatures, new primitive creatures wander in, so the world never dies. The lab log records each arrival.
+- Settling in: every primitive creature (the 60 starters and each newcomer) arrives with a full tank (`startEnergy: 1.0`) but must wait 30 seconds before it can have a baby (`primitiveSettleTime: 30`). The wait keeps minute 1 a fair measure of random brains, instead of one lucky family multiplying. The full tank matters because the air is still: nothing drifts a newcomer into food, so it needs the fuel to walk to a feeding ground. (The ocean version used 90%; in the terrarium that caused twice as many early population crashes.)
 - Cap: 400 creatures on laptops and 150 on phones. At the cap, nobody can reproduce until there's room.
 
 ## 5. The creatures
 
-Each creature is 9 body genes plus a 390-number brain, and every trait has a cost, so no single design wins forever.
+Each creature is a little glowing bug: 9 body genes plus a 390-number brain. Every trait has a cost, so no single design wins forever.
 
 **Genes**
 
 | Gene | Range | Helps with | Costs |
 | --- | --- | --- | --- |
 | Size (radius) | 6–24 units | Stores more energy, wins fights | Slower, and burns more energy every second |
-| Top speed | 30–150 units/sec | Reaching food first, escaping | Fast swimming burns energy fast |
+| Top speed | 30–150 units/sec | Reaching food first, escaping | Fast walking burns energy fast |
 | Turn speed | 1–6 radians/sec | Dodging and chasing | A small energy cost |
 | Sight range | 60–320 units | Spotting food and danger early | Bigger eyes cost energy |
 | Field of view | 60°–300° | Seeing all around | Each view slice gets wider and vaguer |
@@ -140,7 +143,7 @@ Each creature is 9 body genes plus a 390-number brain, and every trait has a cos
 | Mutation rate | 2–30% | Faster change | More broken babies |
 | Clock speed | 0.1–2 cycles/sec | An inner rhythm for zigzags and patterns | None |
 
-**Why in-between diets lose:** plant digestion = (1 − diet)² and meat digestion = diet². A pure plant-eater gets 100% from algae, but a 50/50 creature gets only 25% from each food. This jack-of-all-trades penalty pushes family lines to specialize, which is what splits predators from prey.
+**Why in-between diets lose:** plant digestion = (1 − diet)² and meat digestion = diet². A pure plant-eater gets 100% from sprouts, but a 50/50 creature gets only 25% from each food. This jack-of-all-trades penalty pushes family lines to specialize, which is what splits predators from prey.
 
 **Senses: 25 brain inputs**
 
@@ -149,7 +152,7 @@ Each creature is 9 body genes plus a 390-number brain, and every trait has a cos
 | Food per view slice | 5 | How close the nearest food is, weighted by how nutritious it is for this creature's diet |
 | Creature per view slice | 5 | How close the nearest creature is |
 | Size per view slice | 5 | That creature's size compared with mine: −1 much smaller, +1 much bigger |
-| Dish edge | 3 | How close the wall is, plus two numbers for which way the center lies |
+| Glass wall | 3 | How close the wall is, plus two numbers for which way the center lies |
 | Body | 4 | Energy, health, age and current speed |
 | Inner clock | 1 | A wave that rises and falls at the clock-speed gene |
 | Memory | 2 | Two values the brain wrote on the last tick |
@@ -166,18 +169,20 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 
 | Output | Effect |
 | --- | --- |
-| Thrust | Swim forward, from 0 to top speed |
+| Thrust | Walk forward, from 0 to top speed |
 | Turn | Turn left or right, up to turn speed |
 | Bite | Attack whatever touches its mouth (does nothing until Session 3) |
 | Reproduce | Try to have a baby, if it's mature and has enough energy |
 | Memory 1 and Memory 2 | Store two values for the next tick |
 
-**Swimming is a choice:** the thrust output runs from −1 to 1 and must pass a dead zone of 0.3 (`thrustDeadZone: 0.3`) before the creature swims at all; above that, thrust scales smoothly up to top speed. A random brain often rests instead of drifting into food by luck, so a creature that swims toward food has really learned to.
+**Walking is a choice:** the thrust output runs from −1 to 1 and must pass a dead zone of 0.3 (`thrustDeadZone: 0.3`) before the creature walks at all; above that, thrust scales smoothly up to top speed. A random brain often rests instead of wandering into food by luck, so a creature that walks toward food has really learned to.
+
+**Legs, not fins:** bugs grip the soil. They speed up to the walking speed they want in about a fifth of a second (`walkAcceleration: 5`), stop even faster when they stop walking (`walkBraking: 14`), and never slide sideways when they turn (`legGrip: 14`). Nothing glides or drifts.
 
 **Energy**
 
-- Max energy grows with size squared: a size-10 creature holds 100 energy, or four pieces of algae.
-- Each second costs upkeep (by size²), swimming (by speed² × size), eyes (by sight range × field of view) and a small thinking cost.
+- Max energy grows with size squared: a size-10 creature holds 100 energy, or four sprouts.
+- Each second costs upkeep (by size²), walking (by speed² × size), eyes (by sight range × field of view) and a small thinking cost.
 - Eating gives the food's energy × the creature's digestion for that food.
 - Health is separate. Bites lower it, and it slowly regrows by spending energy.
 - Old age: past 70% of a 4-minute lifespan, upkeep climbs until the creature dies and makes room.
@@ -188,6 +193,7 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 - With bite on and another creature touching its mouth, a creature deals damage per second based on its size × diet.
 - Bigger targets take longer to bring down, and biting costs energy.
 - A kill leaves meat pellets worth most of the victim's stored energy.
+- Meat-eaters look the part: they grow pincers and a spiky shell (see section 7).
 
 **Babies**
 
@@ -222,14 +228,14 @@ Species form automatically when a family line drifts far enough from its founder
 **Colors show family**
 
 - A new species takes its parent species' color, nudged slightly, so related species look related.
-- Plant-eaters stay in the cyan-to-green range and meat-eaters in magenta-to-orange, so you can read the food chain from across the room.
+- Plant-eaters stay in the cyan-to-blue range and meat-eaters in magenta-to-orange, so you can read the food chain from across the room. Green belongs to the sprouts alone, so food never looks like a creature.
 
 **Lab log**
 
 A live feed of short lines, for example:
 
 - Gen 112 · New species: *Ferox lumen*, a meat-eater
-- *Algivora prima* went extinct after 41 generations
+- *Folivora prima* went extinct after 41 generations
 - Population crash: 63% of life lost in the drought
 - Record: specimen #4821 lived 6 minutes and had 23 babies
 
@@ -242,11 +248,11 @@ A live feed of short lines, for example:
 
 - A branching timeline of species: each branch starts when a species appears and ends when it dies out.
 - Branch thickness shows population. Living species glow; extinct ones fade to gray.
-- Click a branch to highlight that species in the dish.
+- Click a branch to highlight that species in the terrarium.
 
 ## 7. Visual style guide
 
-The look is a bioluminescent deep ocean seen through a high-end lab microscope, and every screen should be good enough to screenshot.
+The look is a round glass terrarium on a lab bench at night, seen from directly above: glowing bugs on dark soil under warm heat lamps. Every screen should be good enough to screenshot.
 
 **Palette**
 
@@ -254,31 +260,43 @@ The look is a bioluminescent deep ocean seen through a high-end lab microscope, 
 | --- | --- | --- |
 | Background, edges | Midnight navy | #050B18 |
 | Background, center | Navy glow | #0A1630 |
-| Plant-eaters, main accent | Neon cyan | #22E5FF |
-| Algae, growth | Neon green | #39FF88 |
+| Soil | Navy-tinted dark soil | #131620 |
+| Moss | Deep navy moss | #132628 |
+| Plant-eaters, main accent | Neon cyan to electric blue | #22E5FF to #4A9DFF |
+| Sprouts | Leaf green | #66DD4F |
+| Heat-lamp light | Warm amber glow | #FFB46A |
 | Meat-eaters, danger | Magenta-red | #FF3D6E |
 | Meat, warnings | Amber | #FFB020 |
+| Good news in the interface | Neon green | #39FF88 |
 | Main text | Ice white | #CFE8FF |
 | Secondary text | Steel blue | #6E87A8 |
 | Panel borders | Faint cyan line | rgba(140, 200, 255, 0.15) |
 
-**Creatures**
+**Creatures: little glowing bugs, seen from above**
 
-- Soft glowing bodies from pre-rendered glow sprites with additive blending, so overlapping light blooms like the real thing.
-- A translucent membrane outline around a brighter nucleus.
-- Two eyes facing the heading, with pupils that shift toward whatever the creature is chasing.
-- A tail (flagellum) that waves faster as the creature swims faster.
-- Meat-eaters get a spiky membrane and a mouth notch, so diet shows in shape, not just color.
-- Short fading light trails behind moving creatures.
+- Soft glows from pre-rendered sprites with additive blending, so overlapping light blooms like the real thing.
+- An oval body with a shell seam down the back, a small head, and a glowing abdomen like a firefly's lantern.
+- Six small legs that patter in a tripod gait, faster as the bug walks faster, and stop when it stops.
+- Two eyes on the head, with pupils that glance toward the food it is looking at, and two short antennae that twitch and lean toward food.
+- From Session 3, meat-eaters get pincers and a spiky shell, so diet shows in shape, not just color.
+- Faint glowing footprints behind walking bugs, which fade after a couple of seconds.
 - A ring flash at birth, a pulse when eating, and a burst of particles at death.
+
+**Bugs and food must never look alike, at any zoom**
+
+- Bugs are bright cyan to blue, with a white-hot core and a glow that never shrinks below about 12 pixels on screen, so even babies stay visible when zoomed all the way out.
+- Sprouts are clearly green, smaller and dimmer: a faint green speck from afar, a tiny two-leaf seedling up close.
 
 **The world**
 
-- A radial navy gradient with a dark vignette at the edges.
-- A faint microscope reticle (grid lines and a crosshair) that scales with zoom.
-- Dust particles drifting at two depths, for a 3D parallax feel.
-- Subtle moving light patterns (caustics) across the water.
-- Algae that breathes with a slow pulse, and vents shown as dim clouds of color.
+- A navy lab bench in dim light, with a dark vignette at the edges.
+- The terrarium floor: dark soil with patches of moss, tinted toward navy, with fine soil grain that appears as you zoom in.
+- The glass wall: a subtle glass rim with a soft highlight, and a shadow where the wall meets the soil.
+- A faint measuring grid, as if etched on the glass, that scales with zoom.
+- Heat lamps: warm pools of light with a gentle shimmer, over darker nutrient pads.
+- Dust motes floating in the lamp light at two depths, for a 3D parallax feel.
+- Sprouts that grow in, sway softly and wither.
+- The app opens with the whole terrarium visible below the top bar, never cropped.
 
 **Interface**
 
@@ -291,7 +309,7 @@ The look is a bioluminescent deep ocean seen through a high-end lab microscope, 
 
 - Camera moves ease in and out; nothing snaps.
 - Panels slide in over about 200 ms.
-- A reduced-motion setting turns off trails, caustics and camera easing.
+- A reduced-motion setting turns off footprints, the lamp shimmer and camera easing.
 
 **Accessibility**
 
@@ -301,7 +319,7 @@ The look is a bioluminescent deep ocean seen through a high-end lab microscope, 
 
 ## 8. Interface and controls
 
-The dish fills the screen, panels slide in only when needed, and one click on any creature opens the showpiece: its live brain.
+The terrarium fills the screen, panels slide in only when needed, and one click on any creature opens the showpiece: its live brain.
 
 **Intro screen**
 
@@ -318,7 +336,7 @@ The dish fills the screen, panels slide in only when needed, and one click on an
 
 **Phone layout**
 
-- The dish full screen, a slim top bar, and a bottom sheet with tabs: Inspector, Charts, Log and World.
+- The terrarium full screen, a slim top bar, and a bottom sheet with tabs: Inspector, Charts, Log and World.
 - Pinch to zoom, drag to pan, tap to select.
 
 **Inspector**
@@ -360,7 +378,7 @@ The dish fills the screen, panels slide in only when needed, and one click on an
 
 **Settings**
 
-- Creature cap, algae growth rate, mutation strength and world size.
+- Creature cap, sprout growth rate, mutation strength and world size.
 - Quality: auto, high, medium or low.
 - Sound starts on at a quiet volume after Begin, with mute and a volume slider (Session 4).
 - Reduced motion, and New world with an optional seed.
@@ -377,7 +395,7 @@ Main loop (fixed 1/60 s ticks, then 1 frame)  --ticks-->          Simulation
 Headless test (no drawing, prints a report)   --runs it fast-->   Simulation
 
 Simulation (js/sim, pure logic, never draws):
-  World (dish, vents, currents, algae) · Creatures (genes, senses, brains, energy)
+  World (terrarium, heat lamps, sprouts) · Creatures (genes, senses, brains, energy)
   Species (founders, names, family colors) · Stats and events (chart samples, lab log lines)
 
 Simulation  --nearby queries-->           Spatial grid (finds neighbors fast)
@@ -423,16 +441,17 @@ genesis-lab/
 4. Act: move, turn, eat and bite.
 5. Metabolism: charge energy costs, heal and age.
 6. Births and deaths.
-7. Grow and decay food; drift the vents and currents.
+7. Grow and wither food; drift the heat lamps.
 8. Every half simulated second, sample stats for the charts.
 
 **Performance**
 
 - A spatial hash grid with 160-unit cells, so each creature checks only nearby cells instead of every other creature.
 - Object pools for creatures, food and particles, and no new objects inside a tick, to avoid garbage-collection stutters.
-- Budget with 300 creatures and 1,500 algae on a typical laptop: under 3 ms per tick and under 8 ms per drawn frame, so the default 2x speed (2 ticks per frame) holds 60 fps.
-- Only what's on screen gets drawn. If fps stays under 45 for 3 seconds, trails and particles scale down automatically.
-- Phones get lower caps, fewer particles and no caustics by default.
+- Budget with 300 creatures and 1,500 sprouts on a typical laptop: under 3 ms per tick and under 8 ms per drawn frame, so the default 2x speed (2 ticks per frame) holds 60 fps.
+- Only what's on screen gets drawn. If fps stays under 45 for 3 seconds, footprints, particles and dust motes scale down automatically.
+- The soil and moss are painted once into a texture when a world starts, so the floor costs one image per frame.
+- Phones get lower caps, fewer particles and no lamp shimmer by default.
 
 **Saving**
 
@@ -515,16 +534,18 @@ Don't start a session until the gate before it passes. The times are estimates; 
 
 - [ ] config.js with every starting number
 - [ ] Seeded random numbers, smooth noise, the spatial grid and the fixed-step loop
-- [ ] The dish, nutrient vents, currents and algae growth
-- [ ] Creatures: genes, 5-slice senses, the 25-12-6 brain, actions, energy, health, aging and death
+- [ ] The terrarium, heat lamps over nutrient pads, and sprout growth (no currents)
+- [ ] Creatures: genes, 5-slice senses, the 25-12-6 brain, walking, energy, health, aging and death
 - [ ] Babies with mutation, growing from half size
 - [ ] Population floor and cap
-- [ ] Drawing: background, reticle, dust, glowing creatures with eyes, tails and trails, breathing algae, birth and death effects
+- [ ] Drawing: soil and moss, glass rim, etched grid, lamp light and dust motes, glowing bugs with legs, eyes, antennae and footprints, sprouts, birth and death effects
 - [ ] Pan, zoom, click to select and follow, plus pause and speed buttons
 - [ ] Top-bar counters: generation, population and foraging skill
 - [ ] tools/headless.html
 
 **Gate 1:** foraging skill at least doubles within 10 simulated minutes in 3 seeds, it runs at 60 fps with 300 creatures, and you can see them learning. Commit: "Session 1: core simulation and look".
+
+**Between Sessions 1 and 2: the terrarium switch.** Session 1 first built an ocean in a culture dish. Before Session 2 the world became the lab terrarium described here: a reskin plus still air and walking, with the brains, genes, evolution, energy, babies and headless test unchanged. The foraging gate was re-run and still passes: x4.40, x4.19 and x4.07 in seeds 1–3 (the ocean gave x2.61, x2.76 and x3.03). The one balance change was a full starting tank (`startEnergy: 1.0`, section 4). The ocean version is saved as the git tag `ocean-version`. Commit: "Switch to lab terrarium world".
 
 **Session 2 · See inside their minds (2–3 hours)**
 
@@ -540,11 +561,11 @@ Don't start a session until the gate before it passes. The times are estimates; 
 
 **Session 3 · Predators, species and god mode (2–3 hours)**
 
-- [ ] Meat-eating, biting, meat pellets and the spiky predator look
+- [ ] Meat-eating, biting, meat pellets and the predator look: meat-eaters grow pincers and a spiky shell
 - [ ] Species detection, generated names and family colors
 - [ ] Species streamgraph and family tree
 - [ ] Lab log lines for new species, extinctions and crashes
-- [ ] God mode: Drought, Algae bloom, Meteor strike (click to drop), Ice age, Predator drop and Paint food
+- [ ] God mode: Drought, Sprout bloom, Meteor strike (click to drop), Ice age, Predator drop and Paint food
 - [ ] Hall of Fame: save up to 20 creatures, spawn them back, and share them as codes
 - [ ] Cinematic camera that cruises between births, hunts and crowds
 
@@ -671,7 +692,7 @@ Launch puts Genesis Lab on a free GitHub Pages link, pinned first on your profil
 **Demo GIF and clip**
 
 - Record the GIF with ScreenToGif (free, for Windows): 15–20 seconds, about 900 px wide, under 10 MB.
-- Shot list: intro fade-in → a glide across the dish → creatures beelining for food → a click that lights up a brain → a predator hunt → the species streamgraph.
+- Shot list: intro fade-in → a glide across the terrarium → bugs beelining for sprouts → a click that lights up a brain → a predator hunt → the species streamgraph.
 - Social clip: 20–30 seconds, vertical for TikTok and Reels, with the hook on screen in the first second, such as "I built a world where creatures evolve their own brains."
 
 **Profile**
@@ -692,7 +713,7 @@ The biggest risk is balance, so the plan builds in a population floor, one confi
 
 | Risk | What it looks like | How we handle it |
 | --- | --- | --- |
-| Bad balance | Everything dies, or the dish overflows and nothing improves | Population floor and cap, every number in config.js, and a headless test after every change |
+| Bad balance | Everything dies, or the terrarium overflows and nothing improves | Population floor and cap, every number in config.js, and a headless test after every change |
 | No visible learning | Minute 10 looks like minute 1 | Plant-eaters first, the foraging-skill chart as proof, and energy costs tuned until skill doubles |
 | Predators wipe out prey | Prey die out, then the predators starve | Big targets take longer to kill, biting costs energy, meat decays, and the floor brings in new life |
 | Slow on phones | Choppy motion and a hot phone | Lower caps, auto quality, and nothing drawn off screen |
@@ -707,8 +728,9 @@ The biggest risk is balance, so the plan builds in a population floor, one confi
 Every decision is made, so Session 1 can start as soon as setup is done.
 
 - Name: Genesis Lab.
-- World: a microscopic ocean in a circular culture dish.
-- Colors: neon cyan and green on deep navy, with magenta-red predators.
+- World: a round glass lab terrarium seen from directly above (switched from the original ocean dish before Session 2; that version is saved as the git tag `ocean-version`).
+- Creatures: little glowing bugs that walk on six legs.
+- Colors: glowing cyan-to-blue bugs and green sprouts on navy-tinted soil, warm amber lamp light, and magenta-red predators.
 - Sound: on at a quiet volume once someone clicks Begin, with a mute button.
 - Folder: OneDrive\Attachments\Genesis-Lab on your computer.
 - Tech: plain JavaScript and Canvas 2D, run by double-clicking index.html.
@@ -726,6 +748,8 @@ Every decision is made, so Session 1 can start as soon as setup is done.
 | Generation | How many parents back a creature's family line goes |
 | Species | A group whose DNA is close enough to count as one kind |
 | Foraging skill | Food found per creature per minute; the main "are they learning?" number |
+| Terrarium | A glass container with soil and plants, here a round lab one seen from above |
+| Sprout | A tiny seedling: the plant-eaters' food |
 | fps | Frames per second, or how smooth it looks; 60 is buttery |
 | Tick | One step of the simulation; 60 ticks make a simulated second |
 | Seed | A number that sets a world's randomness, so the same seed gives the same start |
@@ -746,5 +770,5 @@ These ideas wait until Genesis Lab is live, so they can't delay launch; add new 
 - Creature trading cards: export any creature as a stylish card image with its stats
 - Battle mode: drop your saved creature into a friend's world with a share code
 - Time-lapse video export
-- A land-world version with walking, legged creatures
+- A side-view version with legged walking physics
 - A WebGPU mode for 10,000+ creatures

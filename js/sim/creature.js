@@ -123,8 +123,8 @@ GL.Creature = (function () {
         }
       }
 
-      // Dish edge: how close the wall is, and which way the centre lies.
-      var R = C.dishRadius, dist = Math.sqrt(x * x + y * y);
+      // Glass wall: how close it is, and which way the centre lies.
+      var R = C.terrariumRadius, dist = Math.sqrt(x * x + y * y);
       var wallGap = R - dist - this.radius;
       inp[IN.WALL] = M.clamp(1 - wallGap * invSight, 0, 1);
       if (dist > 1) {
@@ -153,7 +153,7 @@ GL.Creature = (function () {
       GL.Brain.think(this.brain, this.inputs, this.hidden, this.outputs);
     },
 
-    // 3. ACT: swim, turn and eat. (Biting does nothing until Session 3.)
+    // 3. ACT: walk, turn and eat. (Biting does nothing until Session 3.)
     act: function (world, dt) {
       var out = this.outputs;
       var dz = C.thrustDeadZone, th = (out[OUT.THRUST] - dz) / (1 - dz);
@@ -163,18 +163,25 @@ GL.Creature = (function () {
       this.wantsBaby = out[OUT.REPRODUCE] > 0;
 
       this.heading = M.wrapAngle(this.heading + this.turn * this.turnSpeed * dt);
+
+      // Walking: split the velocity into "forward" (along the heading) and "sideways".
+      // Legs speed a bug up at walkAcceleration but brake it fast (walkBraking), so it
+      // stops quickly instead of gliding, and grip the soil (legGrip), so turns don't skid.
+      // The air is still: nothing else moves a bug.
       var target = this.thrust * this.topSpeed;
-      var k = C.acceleration * dt; if (k > 1) k = 1;
-      this.vx += (Math.cos(this.heading) * target - this.vx) * k;
-      this.vy += (Math.sin(this.heading) * target - this.vy) * k;
+      var hx = Math.cos(this.heading), hy = Math.sin(this.heading);
+      var fwd = this.vx * hx + this.vy * hy, side = this.vy * hx - this.vx * hy;
+      var k = ((fwd < 0 || target < fwd) ? C.walkBraking : C.walkAcceleration) * dt; if (k > 1) k = 1;
+      fwd += (target - fwd) * k;
+      var g = C.legGrip * dt; if (g > 1) g = 1;
+      side -= side * g;
+      this.vx = hx * fwd - hy * side;
+      this.vy = hy * fwd + hx * side;
+      var nx = this.x + this.vx * dt;
+      var ny = this.y + this.vy * dt;
 
-      var cur = world.current, push = C.currentOnCreatures;
-      cur.sample(this.x, this.y);
-      var nx = this.x + (this.vx + cur.u * push) * dt;
-      var ny = this.y + (this.vy + cur.v * push) * dt;
-
-      // Soft wall: pushed back inside, and it costs extra energy.
-      var lim = C.dishRadius - this.radius, d2 = nx * nx + ny * ny;
+      // Soft glass wall: pushed back inside, and it costs extra energy.
+      var lim = C.terrariumRadius - this.radius, d2 = nx * nx + ny * ny;
       this.wallTouch = 0;
       if (d2 > lim * lim) {
         var d = Math.sqrt(d2), ux = nx / d, uy = ny / d;
@@ -192,7 +199,7 @@ GL.Creature = (function () {
 
     eat: function (world) {
       var food = world.food, buf = world.queryBuf;
-      var reach = this.radius + C.algaeRadius, reach2 = reach * reach;
+      var reach = this.radius + C.sproutRadius, reach2 = reach * reach;
       var n = world.foodGrid.query(this.x, this.y, reach, buf);
       for (var k = 0; k < n; k++) {
         var i = buf[k];
@@ -210,7 +217,7 @@ GL.Creature = (function () {
       }
     },
 
-    // 4. METABOLISM: pay energy for living, swimming, seeing and thinking; heal; age; grow.
+    // 4. METABOLISM: pay energy for living, walking, seeing and thinking; heal; age; grow.
     metabolism: function (dt) {
       var r = this.radius, age = this.age, life = C.lifespan;
       var upkeep = C.upkeepPerSize2 * r * r;
@@ -220,7 +227,7 @@ GL.Creature = (function () {
         upkeep *= 1 + C.oldAgeUpkeep * t * t;     // old age: upkeep climbs
       }
       var cost = upkeep
-        + C.swimCost * this.speed * this.speed * r
+        + C.walkCost * this.speed * this.speed * r
         + this.eyeCost
         + C.thinkCost
         + C.turnCost * Math.abs(this.turn)

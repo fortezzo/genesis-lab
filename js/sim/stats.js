@@ -10,7 +10,7 @@ GL.Stats = function () {
   this.births = 0;
   this.deaths = { starvation: 0, eaten: 0, oldAge: 0, disaster: 0 };
   this.foodEaten = 0;          // pieces of food eaten, ever
-  this.arrivals = 0;           // primitive creatures that drifted in (population floor)
+  this.arrivals = 0;           // primitive creatures that wandered in (population floor)
   this.floorEpisodes = 0;      // times the population dropped below the floor
   this.belowFloor = false;
 
@@ -31,7 +31,7 @@ GL.Stats = function () {
   this._minPopMin = Infinity; this._minPopMax = 0; this._minFloor = 0;
 
   // Sample history for charts (Session 2): plain arrays of numbers.
-  this.history = { time: [], population: [], algae: [], skill: [], speed: [], size: [], sight: [], diet: [] };
+  this.history = { time: [], population: [], sprouts: [], skill: [], speed: [], size: [], sight: [], diet: [] };
 
   this.population = 0;
   this.maxGeneration = 0;
@@ -96,7 +96,7 @@ GL.Stats.prototype = {
         deaths: this._minDeaths,
         arrivals: this._minArrivals,
         maxGeneration: maxGen,
-        algae: world.food.algaeCount,
+        sprouts: world.food.sproutCount,
         avgSpeed: n ? sp / n : 0, avgSize: n ? sz / n : 0, avgSight: n ? si / n : 0
       };
       this.minutes.push(rec);
@@ -108,7 +108,7 @@ GL.Stats.prototype = {
 
     // Chart history (thinned out to every other sample once it is full).
     var hist = this.history;
-    hist.time.push(world.time); hist.population.push(n); hist.algae.push(world.food.algaeCount);
+    hist.time.push(world.time); hist.population.push(n); hist.sprouts.push(world.food.sproutCount);
     hist.skill.push(this.skill);
     hist.speed.push(n ? sp / n : 0); hist.size.push(n ? sz / n : 0);
     hist.sight.push(n ? si / n : 0); hist.diet.push(n ? di / n : 0);

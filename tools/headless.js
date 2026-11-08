@@ -69,10 +69,10 @@ GL.Headless = (function () {
   function formatSeed(r) {
     var L = [];
     L.push('=== Seed ' + r.seed + ' - ' + r.minutes + ' simulated minutes (' + f2(r.msPerTick) + ' ms per tick) ===');
-    L.push(' min |  pop | algae | food eaten | skill/min | births | deaths | drift-ins | max gen');
+    L.push(' min |  pop | sprouts | food eaten | skill/min | births | deaths | newcomers | max gen');
     for (var i = 0; i < r.perMinute.length; i++) {
       var m = r.perMinute[i];
-      L.push(pad(m.minute, 4) + ' | ' + pad(Math.round(m.population), 4) + ' | ' + pad(m.algae, 5) + ' | ' +
+      L.push(pad(m.minute, 4) + ' | ' + pad(Math.round(m.population), 4) + ' | ' + pad(m.sprouts, 7) + ' | ' +
         pad(m.food, 10) + ' | ' + pad(f2(m.skill), 9) + ' | ' + pad(m.births, 6) + ' | ' + pad(m.deaths, 6) + ' | ' +
         pad(m.arrivals, 9) + ' | ' + pad(m.maxGeneration, 7));
     }
@@ -85,7 +85,7 @@ GL.Headless = (function () {
     L.push('Deaths by cause: starvation ' + r.deaths.starvation + ', old age ' + r.deaths.oldAge +
       ', eaten ' + r.deaths.eaten + ', disaster ' + r.deaths.disaster + '.  Births: ' + r.births + '.');
     L.push('Population floor: dropped below it ' + r.floorEpisodes + ' time(s) (' + r.floorAfter10 +
-      ' after minute 10); ' + r.arrivals + ' primitive creatures drifted in.');
+      ' after minute 10); ' + r.arrivals + ' primitive creatures wandered in.');
     if (r.establishedAt >= 0) {
       L.push('Population reached 25% of the cap (' + Math.round(r.cap * 0.25) + ') in minute ' + r.establishedAt +
         '; after that it stayed between ' + r.minAfter + ' and ' + r.maxAfter +

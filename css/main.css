@@ -36,13 +36,13 @@ body.ready > * { opacity: 1; }
 body.ready > #topbar, body.ready > #scalebar { transition-delay: 0.5s; }
 body.ready > #hint { transition-delay: 1.4s; }
 
-#dish {
+#terrarium {
   position: fixed;
   inset: 0;
   display: block;
   cursor: grab;
 }
-#dish.grabbing { cursor: grabbing; }
+#terrarium.grabbing { cursor: grabbing; }
 
 /* Frosted-glass panels: blurred background, thin cyan border, 12px corners. */
 .panel {

@@ -10,27 +10,34 @@ GL.Camera = function () {
   this.w = 800; this.h = 600;                   // screen size in CSS pixels
   this.follow = null;                           // creature being followed (or null)
   this.followId = 0;
+  this.insets = { top: 0, bottom: 0, side: 0 }; // screen space kept clear (the top bar), in CSS pixels
 };
 
 GL.Camera.prototype = {
-  resize: function (w, h, first) {
+  resize: function (w, h, first, insets) {
     this.w = w; this.h = h;
+    if (insets) this.insets = insets;
     if (first) {
+      // Open with the whole terrarium in view, centred in the space below the top bar.
       this.zoom = this.tzoom = this.fitZoom() * GL.Config.render.startZoomFactor;
+      this.x = this.tx = 0;
+      this.y = this.ty = -(this.insets.top - this.insets.bottom) / 2 / this.zoom;
     }
     this.tzoom = this.clampZoom(this.tzoom);
     this.zoom = this.clampZoom(this.zoom);
   },
-  // Zoom at which the whole dish fits on screen.
+  // Zoom at which the whole terrarium, glass wall included, fits in the clear part of the screen.
   fitZoom: function () {
-    return Math.min(this.w, this.h) / (GL.Config.dishRadius * 2 * 1.06);
+    var C = GL.Config, ins = this.insets, R = C.terrariumRadius + C.render.glassThickness;
+    var aw = this.w - 2 * ins.side, ah = this.h - ins.top - ins.bottom;
+    return Math.max(40, Math.min(aw, ah)) / (2 * R);
   },
   clampZoom: function (z) {
     var R = GL.Config.render;
     return GL.M.clamp(z, this.fitZoom() * R.zoomMinFactor, R.zoomMax);
   },
   clampCenter: function () {
-    var R = GL.Config.dishRadius, d = Math.sqrt(this.tx * this.tx + this.ty * this.ty);
+    var R = GL.Config.terrariumRadius, d = Math.sqrt(this.tx * this.tx + this.ty * this.ty);
     if (d > R) { this.tx *= R / d; this.ty *= R / d; }
   },
 

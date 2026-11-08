@@ -1,7 +1,8 @@
 // Genesis Lab - drawing: the renderer. All drawing happens here; it only READS
-// the simulation. Layers, back to front: backdrop, dish (vents, light patterns,
-// reticle, rim), far dust, algae, light trails, creatures (glow, body, tail,
-// eyes), effects, near dust, vignette. Only what is on screen gets drawn.
+// the simulation. Layers, back to front: lab bench, terrarium floor (soil, moss,
+// nutrient pads, lamp light, etched grid), far dust motes, sprouts, glowing
+// footprints, bugs (glow, legs, body, eyes, antennae), effects, the glass wall,
+// near dust motes, vignette. Only what is on screen gets drawn.
 var GL = GL || {};
 
 GL.Renderer = function (canvas, world) {
@@ -12,16 +13,25 @@ GL.Renderer = function (canvas, world) {
   this.background = new GL.Background();
   this.effects = new GL.Effects();
   this.dpr = 1;
-  this.time = 0;                  // real seconds since start (for pulses and waves)
+  this.time = 0;                  // real seconds since start (for pulses, legs and shimmer)
   this.selected = null;           // the selected creature, if any
   this.selectedId = 0;
   this.debug = false;
   this.reducedMotion = false;     // Session 4 adds the setting
-  this.quality = { level: 2, trails: 1, particles: 1, dust: 1, caustics: true };
+  this.quality = { level: 2, footprints: 1, particles: 1, motes: 1, shimmer: true };
   this.lowFpsTime = 0; this.highFpsTime = 0;
   this.view = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  this.wt = [1, 0, 0, 1, 0, 0];   // the world-space transform for this frame
   this.resize(true);
 };
+
+// Where each leg joins the body and how it rests, in body radii and radians from "straight ahead".
+// Front legs reach forward, middle legs out to the side, back legs backward.
+GL.Renderer.LEGS = [
+  { ax: 0.42, ay: 0.30, angle: 0.95, bend: -0.55, femur: 0.55, tibia: 0.60 },
+  { ax: 0.16, ay: 0.40, angle: 1.62, bend: 0.25, femur: 0.55, tibia: 0.55 },
+  { ax: -0.10, ay: 0.42, angle: 2.25, bend: 0.50, femur: 0.60, tibia: 0.65 }
+];
 
 GL.Renderer.prototype = {
   resize: function (first) {
@@ -31,7 +41,18 @@ GL.Renderer.prototype = {
     this.canvas.height = Math.round(h * this.dpr);
     this.canvas.style.width = w + 'px';
     this.canvas.style.height = h + 'px';
-    this.camera.resize(w, h, first === true);
+    this.camera.resize(w, h, first === true, this.measureInsets(h));
+  },
+
+  // Screen space the terrarium should fit into: below the top bar and above the hint line.
+  measureInsets: function (h) {
+    var m = GL.Config.render.viewMarginPx, top = 0, bottom = 0;
+    var bar = document.getElementById('topbar'), hint = document.getElementById('hint');
+    if (bar) { var rb = bar.getBoundingClientRect(); if (rb.height > 0) top = rb.bottom; }
+    if (hint && !hint.classList.contains('gone') && getComputedStyle(hint).display !== 'none') {
+      var rh = hint.getBoundingClientRect(); if (rh.height > 0) bottom = h - rh.top;
+    }
+    return { top: top + m, bottom: bottom + m, side: m };
   },
 
   setWorld: function (world) {
@@ -70,11 +91,13 @@ GL.Renderer.prototype = {
     else { this.lowFpsTime = 0; this.highFpsTime = 0; }
     if (this.lowFpsTime > R.lowFpsSeconds && q.level > 0) { q.level--; this.lowFpsTime = 0; }
     if (this.highFpsTime > 10 && q.level < 2) { q.level++; this.highFpsTime = 0; }
-    q.trails = [0, 0.5, 1][q.level];
+    q.footprints = [0, 0.5, 1][q.level];
     q.particles = [0.3, 0.6, 1][q.level];
-    q.dust = [0.4, 0.7, 1][q.level];
-    q.caustics = q.level > 0;
+    q.motes = [0.4, 0.7, 1][q.level];
+    q.shimmer = q.level > 0;
   },
+
+  setWorldTransform: function () { var t = this.wt; this.ctx.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]); },
 
   draw: function (dt, fps) {
     var ctx = this.ctx, cam = this.camera, world = this.world, dpr = this.dpr;
@@ -83,116 +106,173 @@ GL.Renderer.prototype = {
     this.adaptQuality(fps || 60, dt);
     this.getSelected();
     cam.update(dt, this.reducedMotion);
-    this.background.updateDust(cam, dt);
+    this.background.update(cam, dt);
 
     var w = cam.w, h = cam.h, z = cam.zoom, v = this.view, pad = 60 / z + 40;
     v.x0 = cam.screenToWorldX(0) - pad; v.x1 = cam.screenToWorldX(w) + pad;
     v.y0 = cam.screenToWorldY(0) - pad; v.y1 = cam.screenToWorldY(h) + pad;
     this.effects.consume(world.events, this.quality, v);
     this.effects.update(dt);
+    var wt = this.wt;
+    wt[0] = dpr * z; wt[1] = 0; wt[2] = 0; wt[3] = dpr * z;
+    wt[4] = dpr * (w / 2 - cam.x * z); wt[5] = dpr * (h / 2 - cam.y * z);
 
-    // Screen-space backdrop.
+    // Screen-space backdrop: the lab bench.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     this.background.drawBase(ctx, w, h);
 
-    // World space.
-    ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (w / 2 - cam.x * z), dpr * (h / 2 - cam.y * z));
-    this.background.drawDish(ctx, cam, world, this.quality);
+    // World space: the terrarium floor.
+    this.setWorldTransform();
+    this.background.drawFloor(ctx, cam, world, this.quality, this.reducedMotion);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.background.drawDust(ctx, cam, 'far', this.quality);
-    ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * (w / 2 - cam.x * z), dpr * (h / 2 - cam.y * z));
-    this.drawAlgae(ctx, cam);
-    if (this.quality.trails > 0 && !this.reducedMotion) this.drawTrails(ctx, cam);
+    this.background.drawMotes(ctx, cam, world, 'far', this.quality);
+
+    // World space: life.
+    this.setWorldTransform();
+    this.drawSprouts(ctx, cam);
+    var showPrints = this.quality.footprints > 0 && !this.reducedMotion;
+    this.updateFootprints(showPrints);
+    if (showPrints && z >= GL.Config.render.footprintMinZoom) this.drawFootprints(ctx, cam);
     this.drawCreatures(ctx, cam);
     this.effects.draw(ctx, cam);
     var sel = this.getSelected();
     if (sel) this.drawSelection(ctx, cam, sel);
+    this.background.drawGlass(ctx, cam);
 
     // Screen space again.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.background.drawDust(ctx, cam, 'near', this.quality);
+    this.background.drawMotes(ctx, cam, world, 'near', this.quality);
     this.background.drawVignette(ctx, w, h);
   },
 
-  drawAlgae: function (ctx, cam) {
-    var food = this.world.food, C = GL.Config, R = C.render, v = this.view, z = cam.zoom;
-    var img = GL.Sprites.algae(), t = this.time * R.algaeBreathSpeed, amt = R.algaeBreathAmount;
-    var base = C.algaeRadius * R.algaeGlow * 2, minS = 3 / z, maxAge = C.algaeMaxAge;
+  // ---------------------------------------------------------------- sprouts
+  // From far away a sprout is a faint green speck; up close, two little leaves with a soft glow.
+  // They grow in when they appear, sway gently, and fade as they wither.
+  drawSprouts: function (ctx, cam) {
+    var food = this.world.food, C = GL.Config, R = C.render, v = this.view, z = cam.zoom, S = GL.Sprites;
+    var SPROUT = GL.Food.SPROUT, maxAge = C.sproutMaxAge, growT = R.sproutGrowTime;
+    var full = C.sproutRadius * R.sproutSize;                     // leaf tip to leaf tip, world units
+    var t = this.time * R.sproutSwaySpeed, sway = this.reducedMotion ? 0 : R.sproutSwayAmount;
+    var i, x, y, age, fade, grow, s;
     ctx.globalCompositeOperation = 'lighter';
-    for (var i = 0; i < food.count; i++) {
-      if (!food.alive[i]) continue;
-      var x = food.x[i], y = food.y[i];
+    if (full * z < 4) {
+      var dotImg = S.sproutDot(), d = R.sproutDotPx / z;
+      for (i = 0; i < food.count; i++) {
+        if (!food.alive[i] || food.kind[i] !== SPROUT) continue;
+        x = food.x[i]; y = food.y[i];
+        if (x < v.x0 || x > v.x1 || y < v.y0 || y > v.y1) continue;
+        age = food.age[i]; grow = age < growT ? age / growT : 1;
+        fade = maxAge - age < 3 ? (maxAge - age) / 3 : 1;
+        s = d * (0.55 + 0.45 * grow);
+        ctx.globalAlpha = R.sproutDotAlpha * fade * (0.4 + 0.6 * grow);
+        ctx.drawImage(dotImg, x - s / 2, y - s / 2, s, s);
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+    // Close enough to see leaves: glows first (additive), then the leaves on top.
+    var glowImg = S.sproutGlow(), gs = C.sproutRadius * R.sproutGlow * 2;
+    var drawn = this._sproutIdx || (this._sproutIdx = new Int32Array(food.cap)), n = 0;
+    for (i = 0; i < food.count; i++) {
+      if (!food.alive[i] || food.kind[i] !== SPROUT) continue;
+      x = food.x[i]; y = food.y[i];
       if (x < v.x0 || x > v.x1 || y < v.y0 || y > v.y1) continue;
-      var age = food.age[i], fade = age < 0.8 ? age / 0.8 : 1;
-      if (maxAge - age < 3) fade *= (maxAge - age) / 3;
-      var breath = Math.sin(t + food.phase[i]);
-      var s = Math.max(base * (1 + amt * breath), minS);
-      ctx.globalAlpha = R.algaeGlowAlpha * fade * (0.8 + 0.2 * breath);
-      ctx.drawImage(img, x - s / 2, y - s / 2, s, s);
+      drawn[n++] = i;
+      age = food.age[i]; grow = age < growT ? age / growT : 1;
+      fade = maxAge - age < 3 ? (maxAge - age) / 3 : 1;
+      s = gs * (0.4 + 0.6 * grow);
+      ctx.globalAlpha = R.sproutGlowAlpha * fade;
+      ctx.drawImage(glowImg, x - s / 2, y - s / 2, s, s);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    var canvasSize = full * S.SPROUT_SIZE / 50;                   // the leaves span 49 of the sprite's 64 pixels
+    for (var k = 0; k < n; k++) {
+      i = drawn[k]; x = food.x[i]; y = food.y[i]; age = food.age[i];
+      grow = age < growT ? age / growT : 1;
+      fade = maxAge - age < 3 ? (maxAge - age) / 3 : 1;
+      var ph = food.phase[i];
+      s = canvasSize * (0.3 + 0.7 * grow) * (1 + sway * Math.sin(t + ph));
+      ctx.globalAlpha = fade * (0.5 + 0.5 * grow);
+      ctx.drawImage(S.sprout(((ph / GL.M.TAU) * 8) & 7), x - s / 2, y - s / 2, s, s);
     }
     ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
   },
 
-  // Per-creature drawing state lives on the creature in a private slot the simulation never reads.
+  // ------------------------------------------------------ per-bug drawing state
+  // Drawing-only state lives on the creature in a private slot the simulation never reads.
   fxOf: function (c) {
-    var fx = c.fx, n = GL.Config.render.trailPoints;
-    if (!fx) fx = c.fx = { id: -1, tx: new Float32Array(n), ty: new Float32Array(n), head: 0, count: 0,
-                           tail: 0, px: 0, py: 0 };
+    var fx = c.fx, n = GL.Config.render.footprintMax;
+    if (!fx) fx = c.fx = { id: -1, fpx: new Float32Array(n), fpy: new Float32Array(n), fpt: new Float32Array(n),
+                           head: 0, count: 0, lx: 0, ly: 0, side: 1, gait: 0, gx: 0, gy: 0, move: 0,
+                           px: 0, py: 0, ant: 0 };
     if (fx.id !== c.id) {                      // a pooled creature object reused for a new life
-      fx.id = c.id; fx.head = 0; fx.count = 0; fx.tail = Math.random() * 6; fx.px = 0; fx.py = 0;
-      fx.tx[0] = c.x; fx.ty[0] = c.y; fx.count = 1;
+      fx.id = c.id; fx.head = 0; fx.count = 0; fx.lx = c.x; fx.ly = c.y; fx.side = 1;
+      fx.gait = Math.random() * GL.M.TAU; fx.gx = c.x; fx.gy = c.y; fx.move = 0;
+      fx.px = 0; fx.py = 0; fx.ant = Math.random() * GL.M.TAU;
     }
     return fx;
   },
 
-  drawTrails: function (ctx, cam) {
-    var list = this.world.creatures, R = GL.Config.render, v = this.view, z = cam.zoom;
-    var n = R.trailPoints, spacing = R.trailSpacing;
-    var paths = this._trailPaths || (this._trailPaths = []);
-    var BUCKETS = 6, hMin = GL.Config.plantHueMin, hSpan = GL.Config.plantHueMax - hMin + 0.01;
-    for (var b = 0; b < BUCKETS * 3; b++) paths[b] = new Path2D();
-    var used = n * this.quality.trails;
+  // Leave a footprint every short step, alternating left and right. Prints fade in real time.
+  updateFootprints: function (enabled) {
+    var list = this.world.creatures, R = GL.Config.render, n = R.footprintMax, now = this.time;
     for (var i = 0; i < list.length; i++) {
       var c = list[i], fx = this.fxOf(c);
-      // Record a new trail point when the creature has moved far enough.
-      var last = (fx.head + fx.count - 1) % n, dx = c.x - fx.tx[last], dy = c.y - fx.ty[last];
-      if (dx * dx + dy * dy > spacing * spacing) {
-        if (fx.count < n) fx.count++; else fx.head = (fx.head + 1) % n;
-        last = (fx.head + fx.count - 1) % n;
-        fx.tx[last] = c.x; fx.ty[last] = c.y;
-      }
-      if (c.x < v.x0 || c.x > v.x1 || c.y < v.y0 || c.y > v.y1 || fx.count < 2 || c.speed < 4) continue;
-      var bucket = Math.min(BUCKETS - 1, Math.floor((c.hue - hMin) / hSpan * BUCKETS));
-      var start = Math.max(0, fx.count - used);
-      var px = c.x, py = c.y, curTier = -1, p = null;
-      for (var k = fx.count - 1; k >= start; k--) {     // from the newest point back to the oldest
-        var idx = (fx.head + k) % n, tier = Math.min(2, Math.floor((fx.count - 1 - k) / (n / 3)));
-        if (tier !== curTier) { curTier = tier; p = paths[bucket * 3 + tier]; p.moveTo(px, py); }
-        p.lineTo(fx.tx[idx], fx.ty[idx]);              // one continuous line per fade step
-        px = fx.tx[idx]; py = fx.ty[idx];
+      var dx = c.x - fx.lx, dy = c.y - fx.ly, step = c.radius * R.footprintEvery;
+      if (dx * dx + dy * dy < step * step) continue;
+      fx.lx = c.x; fx.ly = c.y;
+      if (!enabled) continue;
+      var off = c.radius * 0.42 * fx.side, hx = Math.cos(c.heading), hy = Math.sin(c.heading);
+      fx.side = -fx.side;
+      if (fx.count < n) fx.count++; else fx.head = (fx.head + 1) % n;
+      var k = (fx.head + fx.count - 1) % n;
+      fx.fpx[k] = c.x - hy * off; fx.fpy[k] = c.y + hx * off; fx.fpt[k] = now;
+    }
+  },
+
+  drawFootprints: function (ctx, cam) {
+    var list = this.world.creatures, C = GL.Config, R = C.render, v = this.view, z = cam.zoom;
+    var n = R.footprintMax, now = this.time, life = R.footprintLife * this.quality.footprints;
+    var BUCKETS = 6, hMin = C.plantHueMin, hSpan = C.plantHueMax - hMin + 0.01;
+    var paths = this._printPaths || (this._printPaths = []);
+    for (var b = 0; b < BUCKETS * 3; b++) paths[b] = null;
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i], fx = c.fx;
+      if (!fx || fx.id !== c.id || fx.count === 0) continue;
+      if (c.x < v.x0 - 60 || c.x > v.x1 + 60 || c.y < v.y0 - 60 || c.y > v.y1 + 60) continue;
+      var bucket = Math.max(0, Math.min(BUCKETS - 1, Math.floor((c.hue - hMin) / hSpan * BUCKETS)));
+      var rad = Math.max(c.radius * R.footprintSize, 0.6 / z);
+      for (var k = 0; k < fx.count; k++) {
+        var idx = (fx.head + k) % n, age = now - fx.fpt[idx];
+        if (age >= life || age < 0) continue;
+        var tier = Math.min(2, Math.floor(age / life * 3)), p = paths[bucket * 3 + tier];
+        if (!p) p = paths[bucket * 3 + tier] = new Path2D();
+        var x = fx.fpx[idx], y = fx.fpy[idx];
+        p.moveTo(x + rad, y); p.arc(x, y, rad, 0, GL.M.TAU);
       }
     }
-    // Thin streaks that fade in three steps. Butt ends, so the steps don't overlap into bright beads.
     ctx.globalCompositeOperation = 'lighter';
-    ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
     for (b = 0; b < BUCKETS; b++) {
       var hue = Math.round(hMin + (b + 0.5) / BUCKETS * hSpan);
-      for (var tier2 = 0; tier2 < 3; tier2++) {
-        ctx.strokeStyle = 'hsla(' + hue + ',100%,68%,' + (R.trailAlpha * [1, 0.55, 0.25][tier2]) + ')';
-        ctx.lineWidth = Math.min(R.trailWidth * [1, 0.75, 0.5][tier2], R.trailMaxPx / z);
-        ctx.stroke(paths[b * 3 + tier2]);
+      for (var tr = 0; tr < 3; tr++) {
+        if (!paths[b * 3 + tr]) continue;
+        ctx.fillStyle = 'hsla(' + hue + ',100%,70%,' + (R.footprintAlpha * [1, 0.55, 0.22][tr]) + ')';
+        ctx.fill(paths[b * 3 + tr]);
       }
     }
     ctx.globalCompositeOperation = 'source-over';
   },
 
+  // ------------------------------------------------------------------ bugs
   drawCreatures: function (ctx, cam) {
     var list = this.world.creatures, C = GL.Config, R = C.render, v = this.view, z = cam.zoom;
     var S = GL.Sprites, tick = this.world.tick, eatTicks = R.eatFlashTime * C.ticksPerSecond;
-    var detail = this._detail || (this._detail = []), close = this._close || (this._close = []), dot = S.dot();
-    detail.length = 0; close.length = 0;
+    var detail = this._detail || (this._detail = []), legs = this._legs || (this._legs = []);
+    var close = this._close || (this._close = []), dot = S.dot();
+    detail.length = 0; legs.length = 0; close.length = 0;
+    var bodyMinPx = 2;                                             // below this body radius on screen, a bug is a bright dot
     // Glows first (additive light), so bodies sit on top of the bloom.
     ctx.globalCompositeOperation = 'lighter';
     for (var i = 0; i < list.length; i++) {
@@ -203,64 +283,128 @@ GL.Renderer.prototype = {
       var g = Math.max(c.radius * R.creatureGlow * 2 * (1 + flash * 0.35), R.creatureGlowMinPx / z);
       ctx.globalAlpha = R.creatureGlowAlpha * fade * (0.85 + flash * 0.6);
       ctx.drawImage(S.glow(c.hue, 1, 0.58), c.x - g / 2, c.y - g / 2, g, g);
-      if (c.radius * z < 1.3) {                                     // tiny on screen: a bright point is enough
-        var d = 3.2 / z;
-        ctx.globalAlpha = 0.9 * fade;
+      if (c.radius * z < bodyMinPx) {                              // tiny on screen: a white-hot point
+        var d = R.creatureDotPx / z;
+        ctx.globalAlpha = 0.95 * fade;
         ctx.drawImage(dot, c.x - d / 2, c.y - d / 2, d, d);
       } else detail.push(c);
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
+    if (!detail.length) return;
 
-    // Bodies.
-    var scale = S.BODY_SIZE / S.BODY_R;
+    // Legs go under the bodies.
+    for (i = 0; i < detail.length; i++) if (detail[i].radius * z >= R.legDetailPx) legs.push(detail[i]);
+    if (legs.length) this.drawLegs(ctx, cam, legs);
+
+    // Bodies: each sprite turned to face the bug's heading.
+    var wt = this.wt, k0 = wt[0], scale = S.BODY_SIZE / S.BODY_R;
     for (i = 0; i < detail.length; i++) {
       c = detail[i];
-      fade = Math.min(1, (tick - c.bornTick) / 45);
-      var s = c.radius * scale;
-      ctx.globalAlpha = fade;
-      ctx.drawImage(S.body(c.hue), c.x - s / 2, c.y - s / 2, s, s);
+      var s = c.radius * scale, ch = Math.cos(c.heading), sh = Math.sin(c.heading);
+      ctx.setTransform(k0 * ch, k0 * sh, -k0 * sh, k0 * ch, wt[4] + k0 * c.x, wt[5] + k0 * c.y);
+      ctx.globalAlpha = Math.min(1, (tick - c.bornTick) / 45);
+      ctx.drawImage(S.bug(c.hue), -s / 2, -s / 2, s, s);
     }
     ctx.globalAlpha = 1;
+    this.setWorldTransform();
 
-    // Close up: tails (flagella) and eyes.
+    // Close up: antennae and eyes.
     for (i = 0; i < detail.length; i++) if (detail[i].radius * z >= R.detailPx) close.push(detail[i]);
-    if (close.length) { this.drawTails(ctx, cam, close); this.drawEyes(ctx, cam, close); }
+    if (close.length) { this.drawAntennae(ctx, cam, close); this.drawEyes(ctx, cam, close); }
   },
 
-  drawTails: function (ctx, cam, list) {
-    var R = GL.Config.render, dt = Math.min(0.05, this._lastDt || 0.016), z = cam.zoom;
-    if (this.reducedMotion) dt = 0;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // Six legs in a tripod gait (front-left, middle-right and back-left step together, then the
+  // other three). The gait advances with the distance walked, so legs patter faster as a bug
+  // walks faster and stand still when it stops.
+  drawLegs: function (ctx, cam, list) {
+    var C = GL.Config, R = C.render, z = cam.zoom, dt = Math.min(0.05, this._lastDt || 0.016);
+    var LEGS = GL.Renderer.LEGS, TAU = GL.M.TAU, reach = R.legLength;
+    var BUCKETS = 6, hMin = C.plantHueMin, hSpan = C.plantHueMax - hMin + 0.01;
+    var TIERS = 3, tierAlpha = [0.3, 0.58, 0.85];                // legs fade in as a bug gets bigger on screen
+    var paths = this._legPaths || (this._legPaths = []), widths = this._legWidths || (this._legWidths = []);
+    for (var b = 0; b < BUCKETS * TIERS; b++) { paths[b] = null; widths[b] = 0; }
     for (var i = 0; i < list.length; i++) {
       var c = list[i], fx = this.fxOf(c), r = c.radius;
-      var sp = c.topSpeed > 0 ? Math.min(1, c.speed / c.topSpeed) : 0;
-      fx.tail += (R.tailWaveMin + (R.tailWaveMax - R.tailWaveMin) * sp) * dt;   // waves faster when swimming fast
-      var hx = Math.cos(c.heading), hy = Math.sin(c.heading), len = r * R.tailLength;
-      var bx = c.x - hx * r * 0.92, by = c.y - hy * r * 0.92;
-      ctx.beginPath(); ctx.moveTo(bx, by);
-      for (var k = 1; k <= 7; k++) {
-        var t = k / 7, wave = Math.sin(fx.tail - t * 5) * r * 0.32 * t;
-        ctx.lineTo(bx - hx * len * t - hy * wave, by - hy * len * t + hx * wave);
+      var dx = c.x - fx.gx, dy = c.y - fx.gy, dist = Math.sqrt(dx * dx + dy * dy);
+      fx.gx = c.x; fx.gy = c.y;
+      if (dist > r * 6) dist = 0;                                  // skipped frames or a reused body: don't spin the legs
+      var adv = dist / (R.legStride * r) * TAU, maxAdv = R.legPatterMax * dt;
+      if (!this.reducedMotion) fx.gait += adv > maxAdv ? maxAdv : adv;
+      var moving = c.topSpeed > 0 ? Math.min(1, c.speed / (0.2 * c.topSpeed)) : 0;
+      fx.move += (moving - fx.move) * Math.min(1, dt * 12);
+      var ch = Math.cos(c.heading), sh = Math.sin(c.heading);
+      var show = GL.M.smoothstep(R.legDetailPx, R.legFullPx, r * z), tier = show < 0.4 ? 0 : (show < 0.8 ? 1 : 2);
+      var bucket = Math.max(0, Math.min(BUCKETS - 1, Math.floor((c.hue - hMin) / hSpan * BUCKETS))) * TIERS + tier;
+      var p = paths[bucket] || (paths[bucket] = new Path2D());
+      var lw = Math.max(0.9 / z, r * 0.075);
+      if (lw > widths[bucket]) widths[bucket] = lw;
+      for (var leg = 0; leg < 3; leg++) {
+        var L = LEGS[leg];
+        for (var side = -1; side <= 1; side += 2) {
+          var group = (leg === 1) === (side < 0) ? 1 : 0;          // tripod groups
+          var ph = fx.gait + group * Math.PI;
+          var swing = R.legSwing * fx.move * Math.sin(ph);
+          var lift = 1 - 0.14 * fx.move * Math.max(0, Math.cos(ph)); // a leg swinging forward is lifted, so it looks shorter
+          var a1 = L.angle + swing, a2 = a1 + L.bend;
+          var f = L.femur * r * reach * lift, t = L.tibia * r * reach * lift;
+          // Local coordinates: x forward, y toward the bug's right (side +1) or left (side -1).
+          var lx0 = L.ax * r, ly0 = side * L.ay * r;
+          var lx1 = lx0 + Math.cos(a1) * f, ly1 = ly0 + side * Math.sin(a1) * f;
+          var lx2 = lx1 + Math.cos(a2) * t, ly2 = ly1 + side * Math.sin(a2) * t;
+          p.moveTo(c.x + lx0 * ch - ly0 * sh, c.y + lx0 * sh + ly0 * ch);
+          p.lineTo(c.x + lx1 * ch - ly1 * sh, c.y + lx1 * sh + ly1 * ch);
+          p.lineTo(c.x + lx2 * ch - ly2 * sh, c.y + lx2 * sh + ly2 * ch);
+        }
       }
-      ctx.strokeStyle = 'hsla(' + Math.round(c.hue) + ',100%,70%,0.6)';
-      ctx.lineWidth = Math.max(1 / z, r * 0.16);
+    }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (b = 0; b < BUCKETS * TIERS; b++) {
+      if (!paths[b]) continue;
+      var hue = Math.round(hMin + (Math.floor(b / TIERS) + 0.5) / BUCKETS * hSpan);
+      ctx.strokeStyle = 'hsla(' + hue + ',85%,60%,' + tierAlpha[b % TIERS] + ')';
+      ctx.lineWidth = widths[b];
+      ctx.stroke(paths[b]);
+    }
+  },
+
+  // Two short antennae that twitch, and lean toward the food the bug is looking at.
+  drawAntennae: function (ctx, cam, list) {
+    var R = GL.Config.render, z = cam.zoom, t = this.reducedMotion ? 0 : this.time;
+    ctx.lineCap = 'round';
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i], fx = this.fxOf(c), r = c.radius, len = R.antennaLength * r;
+      var ch = Math.cos(c.heading), sh = Math.sin(c.heading);
+      var lean = c.lookAmount > 0 ? Math.max(-0.6, Math.min(0.6, c.lookAngle)) * 0.5 : 0;
+      ctx.beginPath();
+      for (var side = -1; side <= 1; side += 2) {
+        var wig = 0.12 * Math.sin(t * 4.3 + fx.ant + side * 1.3) + 0.05 * Math.sin(t * 11 + fx.ant * 2);
+        var a = side * 0.42 + lean + wig;
+        var bx = 1.04 * r, by = side * 0.1 * r;
+        var cx = bx + Math.cos(a * 0.45) * len * 0.55, cy = by + Math.sin(a * 0.45) * len * 0.55;
+        var tx = bx + Math.cos(a) * len, ty = by + Math.sin(a) * len;
+        ctx.moveTo(c.x + bx * ch - by * sh, c.y + bx * sh + by * ch);
+        ctx.quadraticCurveTo(c.x + cx * ch - cy * sh, c.y + cx * sh + cy * ch, c.x + tx * ch - ty * sh, c.y + tx * sh + ty * ch);
+      }
+      ctx.strokeStyle = 'hsla(' + Math.round(c.hue) + ',100%,74%,0.8)';
+      ctx.lineWidth = Math.max(0.8 / z, r * 0.05);
       ctx.stroke();
     }
   },
 
+  // Two eyes on the head. Pupils glance toward the food it is looking at (smoothed so they don't jitter).
   drawEyes: function (ctx, cam, list) {
-    var whites = new Path2D(), pupils = new Path2D();
+    var whites = new Path2D(), pupils = new Path2D(), HEAD = GL.Sprites.HEAD;
     for (var i = 0; i < list.length; i++) {
       var c = list[i], fx = this.fxOf(c), r = c.radius, h = c.heading;
-      // Pupils glance toward the food it is looking at (smoothed so they don't jitter).
       var look = c.lookAmount > 0 ? c.lookAngle : 0, tx = Math.cos(h + look), ty = Math.sin(h + look);
       fx.px += (tx - fx.px) * 0.15; fx.py += (ty - fx.py) * 0.15;
+      var ch = Math.cos(h), sh = Math.sin(h), er = r * 0.17;
       for (var side = -1; side <= 1; side += 2) {
-        var a = h + side * 0.55, ex = c.x + Math.cos(a) * r * 0.58, ey = c.y + Math.sin(a) * r * 0.58;
-        var er = r * 0.25;
+        var lx = (HEAD.x + 0.08) * r, ly = side * 0.2 * r;
+        var ex = c.x + lx * ch - ly * sh, ey = c.y + lx * sh + ly * ch;
         whites.moveTo(ex + er, ey); whites.arc(ex, ey, er, 0, GL.M.TAU);
-        var px = ex + fx.px * er * 0.45, py = ey + fx.py * er * 0.45, pr = er * 0.52;
+        var px = ex + fx.px * er * 0.45, py = ey + fx.py * er * 0.45, pr = er * 0.55;
         pupils.moveTo(px + pr, py); pupils.arc(px, py, pr, 0, GL.M.TAU);
       }
     }
@@ -288,7 +432,7 @@ GL.Renderer.prototype = {
     var IN = GL.Brain.IN, half = c.fov / 2, w = c.fov / 5;
     for (var s = 0; s < 5; s++) {
       var a0 = c.heading - half + s * w, food = c.inputs[IN.FOOD + s], cre = c.inputs[IN.CREATURE + s];
-      ctx.fillStyle = 'rgba(57, 255, 136,' + (0.04 + food * 0.25) + ')';
+      ctx.fillStyle = 'rgba(102, 221, 79,' + (0.04 + food * 0.25) + ')';
       ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.sight, a0, a0 + w); ctx.closePath(); ctx.fill();
       if (cre > 0) {
         ctx.strokeStyle = 'rgba(255, 176, 32,' + (0.2 + cre * 0.5) + ')';

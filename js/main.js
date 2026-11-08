@@ -22,7 +22,7 @@ var GL = GL || {};
     while (world.creatures.length < bench) world.spawnPrimitive(false);
   }
 
-  var canvas = document.getElementById('dish');
+  var canvas = document.getElementById('terrarium');
   var renderer = new GL.Renderer(canvas, world);
   var app = { world: world, renderer: renderer, loop: null, hud: null, seed: seed, isPhone: isPhone };
 

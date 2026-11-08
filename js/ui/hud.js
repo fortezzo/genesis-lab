@@ -1,6 +1,6 @@
 // Genesis Lab - interface: heads-up display.
 // The top bar (generation, population, foraging skill, speed buttons), the
-// "following" chip for the selected creature, the microscope scale bar,
+// "following" chip for the selected creature, the scale bar in millimetres,
 // a first-time hint and the debug overlay (backtick key).
 var GL = GL || {};
 
@@ -101,16 +101,17 @@ GL.HUD.prototype = {
     el.chipEnergy.parentNode.title = 'Energy ' + Math.round(e * 100) + '%';
   },
 
-  // Microscope scale bar: a round length (10 um, 20 um, 50 um ...) about 120 pixels long.
+  // Scale bar: a round length in millimetres (1, 2, 5, 10, 20, 50 mm ...) about 120 pixels long.
   updateScaleBar: function () {
-    var z = this.app.renderer.camera.zoom;
+    var z = this.app.renderer.camera.zoom, mmPerUnit = GL.Config.mmPerUnit;
     if (Math.abs(z - this.lastScaleZoom) / z < 0.002) return;
     this.lastScaleZoom = z;
-    var target = GL.Config.render.scaleBarPx / z;
-    var p = Math.pow(10, Math.floor(Math.log(target) / Math.LN10)), len = p;
-    [1, 2, 5, 10].forEach(function (m) { if (m * p <= target) len = m * p; });
-    this.el.scaleBar.style.width = Math.round(len * z) + 'px';
-    this.el.scaleLabel.textContent = len >= 1000 ? (len / 1000) + ' mm' : len + ' µm';
+    var targetMm = GL.Config.render.scaleBarPx / z * mmPerUnit;
+    var p = Math.pow(10, Math.floor(Math.log(targetMm) / Math.LN10)), len = p;
+    [1, 2, 5, 10].forEach(function (m) { if (m * p <= targetMm) len = m * p; });
+    len = Number(len.toPrecision(3));                    // tidy floating-point leftovers like 0.30000000000000004
+    this.el.scaleBar.style.width = Math.round(len / mmPerUnit * z) + 'px';
+    this.el.scaleLabel.textContent = len + ' mm';
   },
 
   toggleDebug: function () {
@@ -129,11 +130,11 @@ GL.HUD.prototype = {
       'draw       ' + loop.drawMs.toFixed(2) + ' ms\n' +
       'speed      ' + (loop.paused ? 'paused' : loop.effectiveSpeed.toFixed(1) + 'x actual') + '\n' +
       'creatures  ' + w.creatures.length + ' / ' + w.cap + '\n' +
-      'algae      ' + w.food.algaeCount + '\n' +
+      'sprouts    ' + w.food.sproutCount + '\n' +
       'grid cells ' + w.creatureGrid.usedCells() + ' creature, ' + w.foodGrid.usedCells() + ' food\n' +
       'sim time   ' + Math.floor(t / 60) + ':' + ((t % 60) < 10 ? '0' : '') + (t % 60) + '\n' +
       'seed       ' + w.seed + '\n' +
       'quality    ' + q +
-      (r.getSelected() ? '\nselected   view slices shown in the dish' : '');
+      (r.getSelected() ? '\nselected   view slices shown in the terrarium' : '');
   }
 };

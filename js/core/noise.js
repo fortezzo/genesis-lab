@@ -1,7 +1,7 @@
 // Genesis Lab - core: smooth noise.
 // Seeded 3D gradient ("Perlin") noise. Smooth hills and valleys of values
-// between about -1 and 1, used for the swirling current (x, y, time) and
-// for the slow wandering of the vents.
+// between about -1 and 1, used for the slow wandering and waxing and waning
+// of the heat lamps.
 var GL = GL || {};
 
 GL.Noise = (function () {

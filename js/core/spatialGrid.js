@@ -1,7 +1,7 @@
 // Genesis Lab - core: spatial hash grid.
-// The dish is cut into square cells (160 units by default). Every tick each
+// The terrarium is cut into square cells (160 units by default). Every tick each
 // thing is filed under its cell, so a creature only has to look at the few
-// cells around it instead of at every other thing in the dish.
+// cells around it instead of at every other thing in the terrarium.
 // Rebuilding is a counting sort into flat typed arrays: no new objects.
 var GL = GL || {};
 
