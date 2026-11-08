@@ -20,10 +20,14 @@ GL.LabLog = (function () {
     this.drawerOpen = false;
     var self = this;
     this.list.addEventListener('click', function (e) {
-      var li = e.target.closest ? e.target.closest('li[data-id]') : null;
+      var li = e.target.closest ? e.target.closest('li[data-id],li[data-species]') : null;
       if (!li) return;
-      var c = self.app.world.findById(Number(li.dataset.id));
-      if (c) { self.app.hud.dismissDeath(); self.app.renderer.select(c); self.app.hud.update(0, true); }
+      var app = self.app, c = li.dataset.id ? app.world.findById(Number(li.dataset.id)) : null;
+      if (c) { app.cinematic.stop(); app.hud.dismissDeath(); app.renderer.select(c); app.hud.update(0, true); }
+      if (li.dataset.species) {                                    // a line about a species: ring its members
+        var sp = app.world.species.get(Number(li.dataset.species));
+        if (sp && sp.count > 0) app.highlightSpecies(sp.id, !c);
+      }
     });
   }
 
@@ -38,8 +42,9 @@ GL.LabLog = (function () {
         fresh.reverse();
         for (i = 0; i < fresh.length; i++) {
           var l = fresh[i], li = document.createElement('li');
-          li.className = 'k-' + l.kind + (first ? '' : ' new') + (l.id ? ' clickable' : '');
+          li.className = 'k-' + l.kind + (first ? '' : ' new') + (l.id || l.species ? ' clickable' : '');
           if (l.id) { li.dataset.id = l.id; li.title = 'Fly to specimen #' + l.id + ' (if it is still alive)'; }
+          if (l.species) { li.dataset.species = l.species; if (!l.id) li.title = 'Show this species in the terrarium (if it is still alive)'; }
           li.innerHTML = '<span class="lt">' + clock(l.time) + '</span><span>' + esc(l.text) + '</span>';
           this.list.insertBefore(li, this.list.firstChild);
         }

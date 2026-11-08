@@ -13,6 +13,7 @@ GL.Camera = function () {
   this.insets = { top: 0, bottom: 0, side: 0 }; // screen space kept clear (the top bar), in CSS pixels
   this.offX = 0; this.offY = 0;                 // a followed creature sits this many screen pixels off centre, so
                                                 // it stays in the middle of the space the panels leave free
+  this.ease = 0;                                // 0 = the usual glide speed; the cinematic camera sets a slower one
 };
 
 GL.Camera.prototype = {
@@ -83,7 +84,7 @@ GL.Camera.prototype = {
       if (!f.alive || f.id !== this.followId) this.follow = null;   // it died: stay where we are
       else { this.tx = f.x + this.offX / this.zoom; this.ty = f.y + this.offY / this.zoom; }
     }
-    var k = reducedMotion ? 1 : 1 - Math.exp(-GL.Config.render.cameraEase * dt);
+    var k = reducedMotion ? 1 : 1 - Math.exp(-(this.ease || GL.Config.render.cameraEase) * dt);   // cinematic mode glides slower
     this.x += (this.tx - this.x) * k;
     this.y += (this.ty - this.y) * k;
     // Zoom glides in log space so zooming in and out feel equally smooth.

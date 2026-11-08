@@ -14,12 +14,18 @@
 // / meals luck would bring a bug walking there, which rises as food gets scarce
 // even for random brains) and foodRate (food found per bug per minute, which
 // peaks during the population boom and then falls to what each bug burns).
+// Foraging skill and steering are about finding sprouts, so they count plant-eaters
+// only; meat-eaters (predators) are counted separately.
 var GL = GL || {};
 
 GL.Stats = function () {
   var C = GL.Config;
   this.births = 0;
+  this.meatBirths = 0;         // babies born meat-eaters
   this.deaths = { starvation: 0, eaten: 0, oldAge: 0, disaster: 0 };
+  this.meatMeals = 0;          // meat pellets eaten, ever
+  this.predators = 0;          // meat-eaters alive (last sample)...
+  this.prey = 0;               // ...and plant-eaters
   this.foodEaten = 0;          // pieces of food eaten, ever
   this.luckMeals = 0;          // meals eaten by hungry bugs, ever (updated by the creatures)
   this.luckExpected = 0;       // meals blind luck would have given those hungry bugs, ever
@@ -31,6 +37,7 @@ GL.Stats = function () {
   this.belowFloor = false;
   this.babyDeaths = 0;         // babies (not primitives) that have died...
   this.babyDeathsUnfed = 0;    // ...and how many of them never ate once
+  this.babyUnfedEaten = 0;     // ...of which were eaten by a meat-eater before their first meal
 
   // Rolling window for the live numbers.
   this.winLen = Math.max(2, Math.round(C.skillWindowSec * C.ticksPerSecond / C.statsIntervalTicks));
@@ -62,7 +69,7 @@ GL.Stats = function () {
   // births and deaths are running totals (the charts turn them into per-minute rates).
   this.history = { time: [], population: [], sprouts: [], skill: [], adultRate: [], ghostRate: [], foodRate: [], steer: [],
                    steerLuck: [], speed: [], size: [], sight: [], diet: [], turn: [],
-                   births: [], starvation: [], oldAge: [], eaten: [], disaster: [] };
+                   births: [], starvation: [], oldAge: [], eaten: [], disaster: [], predators: [], species: [], meat: [] };
   this.championId = 0;         // the living creature with the best score: babies x 3 + minutes alive
   this.championScore = 0;
 
@@ -78,17 +85,32 @@ GL.Stats.ratio = function (meals, hungry, ghostMeals, ghostHungry) {
   if (hungry <= 0 || ghostHungry <= 0) return 0;
   return (meals / hungry) / ((ghostMeals + 0.5) / ghostHungry);
 };
+// Living meat-eater species, and the size of the biggest one.
+GL.Stats.meatSpecies = function (world) {
+  var list = world.species.list, n = 0;
+  for (var i = 0; i < list.length; i++) if (list[i].meat && list[i].count > 0) n++;
+  return n;
+};
+GL.Stats.biggestMeat = function (world) {
+  var list = world.species.list, best = 0;
+  for (var i = 0; i < list.length; i++) if (list[i].meat && list[i].count > best) best = list[i].count;
+  return best;
+};
 
 GL.Stats.prototype = {
-  onBirth: function () { this.births++; this._minBirths++; },
+  onBirth: function (c) { this.births++; this._minBirths++; if (c && c.meat) { this.meatBirths++; this._minMeatBirths++; } },
   onDeath: function (cause, c) {
     this.deaths[cause]++; this._minDeaths++;
+    if (cause === 'eaten') this._minEaten++;
     if (c && !c.primitive) {
       this.babyDeaths++; this._minBabyDeaths++;
-      if (c.foodEaten === 0) { this.babyDeathsUnfed++; this._minBabyUnfed++; }
+      if (c.foodEaten === 0) {
+        this.babyDeathsUnfed++; this._minBabyUnfed++;
+        if (cause === 'eaten') this.babyUnfedEaten++;
+      }
     }
   },
-  onEat: function () { this.foodEaten++; this._minFood++; },
+  onEat: function (meat) { this.foodEaten++; this._minFood++; if (meat) { this.meatMeals++; this._minMeat++; } },
   onArrival: function () { this.arrivals++; this._minArrivals++; },
   onFloorEpisode: function () { this.floorEpisodes++; this._minFloor++; },
 
@@ -101,6 +123,8 @@ GL.Stats.prototype = {
     this._minGhostMeals0 = this._ghostMeals || 0; this._minGhostHungry0 = this._ghostHungry || 0;
     this._minSteerSeen = 0; this._minSteerHit = 0; this._minSteerLuck = 0;
     this._minBabyDeaths = 0; this._minBabyUnfed = 0;
+    this._minEaten = 0; this._minMeat = 0; this._minMeatBirths = 0;
+    this._minPredSum = 0; this._minPredMin = Infinity; this._minPredMax = 0; this._minPreyMin = Infinity;
   },
 
   sample: function (world) {
@@ -113,6 +137,7 @@ GL.Stats.prototype = {
     var maxGen = 0, genSum = 0, sp = 0, sp2 = 0, fast = 0, tu = 0, sz = 0, si = 0, di = 0;
     var cone = C.steerConeDeg * Math.PI / 180, seen = 0, hit = 0, luck = 0;
     var champ = 0, champScore = -1, bw = C.championBabyWeight, mw = C.championMinuteWeight / 60;
+    var pred = 0, pSp = 0, pSz = 0, qSp = 0, qSz = 0, pSeen = 0, pHit = 0;
     for (i = 0; i < n; i++) {
       var c = list[i];
       var score = c.babies * bw + c.age * mw;
@@ -123,12 +148,28 @@ GL.Stats.prototype = {
       sp += spd; sp2 += spd * spd; if (spd >= 140) fast++;
       tu += c.genes[G.TURN];
       sz += c.genes[G.SIZE]; si += c.genes[G.SIGHT]; di += c.genes[G.DIET];
-      if (c.lookAmount > 0 && c.thrust > 0 && c.speed > C.steerMinSpeed * c.topSpeed) {
+      var walking = c.lookAmount > 0 && c.thrust > 0 && c.speed > C.steerMinSpeed * c.topSpeed;
+      if (c.meat) {
+        pred++; pSp += spd; pSz += c.genes[G.SIZE];
+        if (walking) { pSeen++; if (Math.abs(c.lookAngle) <= cone) pHit++; }
+        continue;
+      }
+      qSp += spd; qSz += c.genes[G.SIZE];
+      if (walking) {
         seen++;
         if (Math.abs(c.lookAngle) <= cone) hit++;
         luck += Math.min(1, 2 * cone / c.fov);   // pointed at it by chance: the cone's share of the view
       }
     }
+    var prey = n - pred;
+    this.predators = pred; this.prey = prey;
+    this.predSpeed = pred ? pSp / pred : 0; this.predSize = pred ? pSz / pred : 0;
+    this.preySpeed = prey ? qSp / prey : 0; this.preySize = prey ? qSz / prey : 0;
+    this.predSteer = pSeen ? pHit / pSeen : 0;
+    this._minPredSum += pred;
+    if (pred < this._minPredMin) this._minPredMin = pred;
+    if (pred > this._minPredMax) this._minPredMax = pred;
+    if (prey < this._minPreyMin) this._minPreyMin = prey;
     this.maxGeneration = maxGen;
     this.championId = champ; this.championScore = champScore > 0 ? champScore : 0;
     if (maxGen > this.maxGenerationEver) this.maxGenerationEver = maxGen;
@@ -198,7 +239,18 @@ GL.Stats.prototype = {
         avgSpeed: n ? sp / n : 0, avgSize: n ? sz / n : 0, avgSight: n ? si / n : 0,
         speedSpread: n ? Math.sqrt(Math.max(0, sp2 / n - (sp / n) * (sp / n))) : 0,  // spread of top speeds (standard deviation)
         speedHigh: n ? fast / n : 0,                                         // share of bugs with a top speed of 140 or more
-        avgTurn: n ? tu / n : 0                                              // average turn-speed gene
+        avgTurn: n ? tu / n : 0,                                             // average turn-speed gene
+        avgDiet: n ? di / n : 0,
+        predators: this._minPredSum / this._minSamples,                      // meat-eaters alive (average over the minute)...
+        predMin: this._minPredMin, predMax: this._minPredMax, predEnd: pred, // ...lowest, highest and at the end
+        preyMin: this._minPreyMin, preyEnd: prey,                            // plant-eaters: lowest and at the end
+        eaten: this._minEaten, meatMeals: this._minMeat, meatBirths: this._minMeatBirths,
+        predSpeed: this.predSpeed, preySpeed: this.preySpeed, predSize: this.predSize, preySize: this.preySize,
+        predSteer: this.predSteer,
+        species: world.species ? world.species.living : 0,
+        speciesEver: world.species ? world.species.list.length : 0,
+        meatSpecies: world.species ? GL.Stats.meatSpecies(world) : 0,
+        biggestMeatSpecies: world.species ? GL.Stats.biggestMeat(world) : 0
       };
       this.minutes.push(rec);
       if (this.startSkill < 0) this.startSkill = rec.skill;
@@ -214,6 +266,7 @@ GL.Stats.prototype = {
     hist.sight.push(n ? si / n : 0); hist.diet.push(n ? di / n : 0); hist.turn.push(n ? tu / n : 0);
     hist.births.push(this.births); hist.starvation.push(this.deaths.starvation); hist.oldAge.push(this.deaths.oldAge);
     hist.eaten.push(this.deaths.eaten); hist.disaster.push(this.deaths.disaster);
+    hist.predators.push(pred); hist.species.push(world.species ? world.species.living : 0); hist.meat.push(world.food.meatCount);
     if (hist.time.length > C.statsHistoryMax) {
       for (var key in hist) {
         var arr = hist[key], out = [];

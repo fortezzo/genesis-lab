@@ -27,10 +27,10 @@ GL.BrainView = (function () {
     { name: 'Memory', icon: 'mem', color: '#9FD7E8', rows: ['memory 1', 'memory 2'] }
   ];
   var OUT_LABELS = ['walk', 'turn', 'bite', 'baby', 'memory 1', 'memory 2'];
-  // Biting does nothing until meat-eaters exist (Session 3), so until then the bite action is drawn
-  // dimmed and labelled "bite (not yet)", with no live glow, bar or pulses.
-  var BITE_IDLE = !C.meatEating, BITE_NODE = NI + NH + OUT.BITE;
-  function idleLink(c) { return BITE_IDLE && c >= NI * NH && Math.floor((c - NI * NH) / NH) === OUT.BITE; }
+  // A plant-eater's bite does nothing (only meat-eaters can hurt), so for a plant-eater the bite action
+  // is drawn dimmed, with no live glow, bar or pulses; for a meat-eater it lights up like the others.
+  var BITE_NODE = NI + NH + OUT.BITE;
+  function biteLink(c) { return c >= NI * NH && Math.floor((c - NI * NH) / NH) === OUT.BITE; }
   var BODY_ICONS = ['energy', 'health', 'age', 'speed'];
 
   function BrainView(canvas, tip) {
@@ -69,6 +69,7 @@ GL.BrainView = (function () {
       this.subject = s;
       if (s && s.key !== this.subjectKey) {
         this.subjectKey = s.key; this.dirty = true; this.pn = 0;
+        this.biteIdle = !(s.digestMeat > 0);
         this.acc.fill(0); this.kick.fill(0);
         this.sIn.fill(0); this.sHid.fill(0); this.sOut.fill(0);
       }
@@ -153,7 +154,7 @@ GL.BrainView = (function () {
       var idle = new Path2D();
       for (c = 0; c < NL; c++) {
         var w = this.weight(c), a = Math.abs(w), tier = a < 0.5 ? 0 : a < 1 ? 1 : a < 2 ? 2 : 3;
-        if (idleLink(c)) { this.curve(idle, c); continue; }
+        if (this.biteIdle && biteLink(c)) { this.curve(idle, c); continue; }
         this.curve(paths[(w >= 0 ? 0 : 4) + tier], c);
       }
       g.strokeStyle = 'rgba(110, 135, 168, 0.07)'; g.lineWidth = 0.6; g.stroke(idle);
@@ -169,18 +170,20 @@ GL.BrainView = (function () {
       var row = 0;
       for (k = 0; k < GROUPS.length; k++) {
         var grp = GROUPS[k];
+        var preyGroup = k === 0 && s.meat;                         // to a meat-eater, the food senses show prey and meat
         for (var r = 0; r < grp.rows.length; r++) {
           var y = this.ny[row], icon = grp.icon === 'body' ? BODY_ICONS[r] : grp.icon;
-          drawIcon(g, icon, 9, y, grp.color, r, grp.rows.length);
+          drawIcon(g, icon, 9, y, preyGroup ? '#FF7A93' : grp.color, r, grp.rows.length);
           g.fillStyle = r === 0 ? '#CFE8FF' : '#8FA6C4';
-          g.fillText(r === 0 && grp.rows.length === 5 ? grp.name.toLowerCase() + ', ' + grp.rows[r] : grp.rows[r], 20, y + 0.5);
+          g.fillText(r === 0 && grp.rows.length === 5 ? (preyGroup ? 'prey' : grp.name.toLowerCase()) + ', ' + grp.rows[r] : grp.rows[r], 20, y + 0.5);
           row++;
         }
       }
       // Output labels.
       g.font = '600 11px "Space Grotesk", "Inter", sans-serif';
       for (k = 0; k < NO; k++) {
-        g.fillStyle = k >= 4 || (k === OUT.BITE && BITE_IDLE) ? (k === OUT.BITE ? '#5C7393' : '#8FA6C4') : '#CFE8FF';
+        var biteK = k === OUT.BITE;
+        g.fillStyle = biteK && this.biteIdle ? '#5C7393' : (biteK ? '#FF8FAB' : (k >= 4 ? '#8FA6C4' : '#CFE8FF'));
         g.fillText(OUT_LABELS[k], this.xo + 12, this.ny[NI + NH + k] - 6);
       }
       g.font = '9px "Inter", sans-serif'; g.fillStyle = '#6E87A8'; g.textAlign = 'center';
@@ -235,7 +238,7 @@ GL.BrainView = (function () {
       for (k = 0; k < 6; k++) paths[k] = new Path2D();
       for (c = 0; c < NL; c++) {
         var st = this.str[c];
-        if (st < thr || idleLink(c) || (this.hover >= 0 && !this.touchesHover(c))) continue;
+        if (st < thr || (this.biteIdle && biteLink(c)) || (this.hover >= 0 && !this.touchesHover(c))) continue;
         var tier = st < 0.4 ? 0 : st < 0.75 ? 1 : 2;
         this.curve(paths[(this.sig[c] >= 0 ? 0 : 3) + tier], c); counts[(this.sig[c] >= 0 ? 0 : 3) + tier]++;
       }
@@ -251,7 +254,7 @@ GL.BrainView = (function () {
       if (live && running) {
         for (c = 0; c < NL; c++) {
           st = this.str[c];
-          if (st < thr || st < U.brainPulseMinSignal || idleLink(c)) { this.acc[c] *= 0.9; continue; }
+          if (st < thr || st < U.brainPulseMinSignal || (this.biteIdle && biteLink(c))) { this.acc[c] *= 0.9; continue; }
           this.acc[c] += U.brainPulseRate * st * dt;
           if (this.acc[c] >= 1) {
             this.acc[c] -= 1;
@@ -336,13 +339,13 @@ GL.BrainView = (function () {
         if (a > 0.55) { ctx.beginPath(); ctx.arc(x, y, r * 0.45 * a, 0, M.TAU); ctx.fillStyle = 'rgba(255,255,255,' + (0.9 * (a - 0.5)) + ')'; ctx.fill(); }
         ctx.beginPath(); ctx.arc(x, y, r, 0, M.TAU);
         ctx.lineWidth = i === this.hover ? 2 : 1;
-        ctx.strokeStyle = i === this.hover ? '#FFFFFF' : (i === BITE_NODE && BITE_IDLE ? 'rgba(110, 135, 168, 0.4)' : M.rgba(rgb, 0.35 + 0.55 * a));
+        ctx.strokeStyle = i === this.hover ? '#FFFFFF' : (i === BITE_NODE && this.biteIdle ? 'rgba(110, 135, 168, 0.4)' : M.rgba(rgb, 0.35 + 0.55 * a));
         ctx.stroke();
       }
     },
 
     valueOf: function (i) {
-      if (i === BITE_NODE && BITE_IDLE) return 0;      // not used yet: drawn dark
+      if (i === BITE_NODE && this.biteIdle) return 0;  // a plant-eater's bite does nothing: drawn dark
       return i < NI ? this.sIn[i] : (i < NI + NH ? this.sHid[i - NI] : this.sOut[i - NI - NH]);
     },
 
@@ -352,8 +355,8 @@ GL.BrainView = (function () {
       ctx.font = '9.5px "JetBrains Mono", monospace';
       for (var k = 0; k < NO; k++) {
         var v = this.sOut[k], y = this.ny[NI + NH + k] + 7;
-        if (k === OUT.BITE && BITE_IDLE) {
-          ctx.fillStyle = '#5C7393'; ctx.fillText('(not yet)', x, y + 3);
+        if (k === OUT.BITE && this.biteIdle) {
+          ctx.fillStyle = '#5C7393'; ctx.fillText('(eats plants)', x, y + 3);
           continue;
         }
         ctx.fillStyle = 'rgba(140, 200, 255, 0.12)'; ctx.fillRect(x, y - 1, bw, 2);
@@ -393,14 +396,14 @@ GL.BrainView = (function () {
       if (i < NI) {
         raw = s.alive ? s.inputs[i] : 0;
         html = '<b>' + B.INPUT_NAMES[i] + '</b> <span class="v' + (raw < 0 ? ' neg' : '') + '">' + fmt(raw) + '</span>' +
-          '<span class="d">' + inputMeaning(i, raw) + '</span>' + this.topLinks(i, 'out');
+          '<span class="d">' + inputMeaning(i, raw, s.meat) + '</span>' + this.topLinks(i, 'out');
       } else if (i < NI + NH) {
         html = '<b>Hidden neuron ' + (i - NI + 1) + '</b> <span class="v' + (v < 0 ? ' neg' : '') + '">' + fmt(s.alive ? s.hidden[i - NI] : 0) + '</span>' +
           '<span class="d">Mixes the senses into one signal (between -1 and 1).</span>' + this.topLinks(i, 'in');
       } else {
         var k = i - NI - NH; raw = s.alive ? s.outputs[k] : 0;
         html = '<b>' + B.OUTPUT_NAMES[k] + '</b> <span class="v' + (raw < 0 ? ' neg' : '') + '">' + fmt(raw) + '</span>' +
-          '<span class="d">' + outputMeaning(k, raw) + '</span>' + this.topLinks(i, 'in');
+          '<span class="d">' + outputMeaning(k, raw, this.biteIdle) + '</span>' + this.topLinks(i, 'in');
       }
       this.tip.innerHTML = html;
       this.tip.classList.remove('hidden');
@@ -437,8 +440,9 @@ GL.BrainView = (function () {
 
   function fmt(v) { return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2); }
 
-  function inputMeaning(i, v) {
-    if (i < 5) return v > 0.01 ? 'Food seen in this slice: ' + Math.round(v / C.foodSenseGain * 100) + '% (closer and more nutritious = stronger).' : 'No food seen in this slice.';
+  function inputMeaning(i, v, meat) {
+    if (i < 5) return v > 0.01 ? (meat ? 'Prey or meat seen in this slice: ' : 'Food seen in this slice: ') + Math.round(v / C.foodSenseGain * 100) +
+      '% (closer and more nutritious = stronger).' : (meat ? 'No prey or meat in this slice.' : 'No food seen in this slice.');
     if (i < 10) return v > 0.01 ? 'Another bug in this slice, ' + Math.round(v * 100) + '% close.' : 'No bug in this slice.';
     if (i < 15) return Math.abs(v) < 0.01 ? 'Nothing to compare in this slice.' : (v > 0 ? 'That bug is bigger than me.' : 'That bug is smaller than me.');
     if (i === IN.WALL) return v > 0.01 ? 'The glass wall is ' + Math.round(v * 100) + '% close.' : 'The glass wall is out of sight.';
@@ -459,12 +463,13 @@ GL.BrainView = (function () {
     if (k === OUT.REPRODUCE) return v > 0 ? 'wants one' : 'not now';
     return fmt(v);
   }
-  function outputMeaning(k, v) {
+  function outputMeaning(k, v, idle) {
     var dz = C.thrustDeadZone;
     if (k === OUT.THRUST) return v > dz ? 'Walking at ' + Math.round((v - dz) / (1 - dz) * 100) + '% of top speed.' : 'Below ' + dz + ': standing still.';
     if (k === OUT.TURN) return Math.abs(v) < 0.08 ? 'Going straight.' : 'Turning ' + (v > 0 ? 'right' : 'left') + ' at ' + Math.round(Math.abs(v) * 100) + '% of its turn speed.';
-    if (k === OUT.BITE) return C.meatEating ? 'Bites anything at its mouth when above 0.'
-      : 'Not used yet: biting does nothing until meat-eaters arrive (Session 3). The brain already has the wire, so evolution can use it later.';
+    if (k === OUT.BITE) return idle
+      ? 'A plant-eater\'s bite does nothing. The wire is still there: if a baby is born with a meat-eater\'s gut, evolution can use it.'
+      : 'Above 0, its pincers close on whatever touches its mouth and hold it; they open again only below ' + (-C.biteRelease) + '.';
     if (k === OUT.REPRODUCE) return v > 0 ? 'Wants a baby: it gets one if it is grown, rested and well fed.' : 'Not trying for a baby.';
     return 'Stored for the next tick: its only memory.';
   }
@@ -558,11 +563,12 @@ GL.RadarView = (function () {
       for (k = 1; k <= 3; k++) { ctx.beginPath(); ctx.arc(cx, cy, R * k / 3, 0, M.TAU); ctx.stroke(); }
       ctx.beginPath(); ctx.moveTo(cx - R - 8, cy); ctx.lineTo(cx + R + 8, cy); ctx.moveTo(cx, cy - R - 6); ctx.lineTo(cx, cy + R + 6); ctx.stroke();
 
-      // The five slices.
+      // The five slices (green where a plant-eater sees food; red where a meat-eater sees prey or meat).
+      var foodRgb = s.meat ? '255, 96, 110' : '102, 221, 79';
       for (k = 0; k < 5; k++) {
         var a0 = up - half + k * sw, f = this.sFood[k];
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a0 + sw); ctx.closePath();
-        ctx.fillStyle = 'rgba(102, 221, 79,' + (0.035 + 0.32 * f) + ')'; ctx.fill();
+        ctx.fillStyle = 'rgba(' + foodRgb + ',' + (0.035 + 0.32 * f) + ')'; ctx.fill();
         ctx.strokeStyle = k === hoverSlice ? 'rgba(255, 255, 255, 0.85)' : 'rgba(140, 200, 255, 0.22)';
         ctx.lineWidth = k === hoverSlice ? 1.5 : 1; ctx.stroke();
       }
@@ -576,7 +582,7 @@ GL.RadarView = (function () {
       }
 
       ctx.globalCompositeOperation = 'lighter';
-      var glowG = GL.Sprites.glow(105, 0.7, 0.6), glowB = GL.Sprites.glow(214, 1, 0.62), glowA = GL.Sprites.glow(38, 1, 0.55);
+      var glowG = s.meat ? GL.Sprites.glow(355, 1, 0.62) : GL.Sprites.glow(105, 0.7, 0.6), glowB = GL.Sprites.glow(214, 1, 0.62);
       for (k = 0; k < 5; k++) {
         var mid = up - half + (k + 0.5) * sw;
         if (this.sFood[k] > 0.02) {                 // food blip at the distance it is sensed
@@ -605,7 +611,7 @@ GL.RadarView = (function () {
       var bs = 28;
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(up);
       ctx.globalAlpha = live ? 1 : 0.4;
-      ctx.drawImage(GL.Sprites.bug(s.hue), -bs / 2, -bs / 2, bs, bs);
+      ctx.drawImage(GL.Sprites.body(s.hue, s.meat), -bs / 2, -bs / 2, bs, bs);
       ctx.restore(); ctx.globalAlpha = 1;
       // Edge labels.
       ctx.font = '9.5px "Inter", sans-serif'; ctx.fillStyle = '#8FA6C4'; ctx.textAlign = 'center';

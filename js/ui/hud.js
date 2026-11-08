@@ -27,7 +27,7 @@ GL.HUD = function (app) {
   this.app = app;
   var $ = function (id) { return document.getElementById(id); };
   this.el = {
-    gen: $('stat-gen'), pop: $('stat-pop'), skill: $('stat-skill'), trend: $('stat-trend'),
+    gen: $('stat-gen'), pop: $('stat-pop'), skill: $('stat-skill'), trend: $('stat-trend'), species: $('stat-species'), meat: $('stat-meat'),
     speeds: $('speeds'), chip: $('selection'), chipName: $('sel-name'), chipMeta: $('sel-meta'),
     chipEnergy: $('sel-energy'), chipClose: $('sel-close'), chipActions: $('sel-actions'),
     chipFollow: $('sel-follow'), chipStay: $('sel-stay'), topbar: $('topbar'),
@@ -36,7 +36,9 @@ GL.HUD = function (app) {
   this.textTimer = 0;
   this.lastScaleZoom = 0;
   this.death = null;           // when the followed bug dies: { record, next, label, until }
-  this.tickers = { gen: new GL.Ticker(this.el.gen, 0), pop: new GL.Ticker(this.el.pop, 0), skill: new GL.Ticker(this.el.skill, 1) };
+  this.tickers = { gen: new GL.Ticker(this.el.gen, 0), pop: new GL.Ticker(this.el.pop, 0), skill: new GL.Ticker(this.el.skill, 1),
+                   species: new GL.Ticker(this.el.species, 0) };
+  this.drawerTab = 'charts';
   this.buildSpeedButtons();
   var self = this;
   this.el.chipClose.addEventListener('click', function () { self.dismissDeath(); app.renderer.select(null); self.update(0, true); });
@@ -47,6 +49,8 @@ GL.HUD = function (app) {
   document.getElementById('btn-champion').addEventListener('click', function () { self.followChampion(); });
   document.getElementById('btn-charts').addEventListener('click', function () { self.toggleDrawer(); });
   document.getElementById('drawer-close').addEventListener('click', function () { self.toggleDrawer(false); });
+  document.getElementById('tab-charts').addEventListener('click', function () { self.showDrawerTab('charts'); });
+  document.getElementById('tab-tree').addEventListener('click', function () { self.showDrawerTab('tree'); });
   setTimeout(function () { self.hideHint(); }, GL.Config.ui.hintSeconds * 1000);
 };
 
@@ -105,10 +109,29 @@ GL.HUD.prototype = {
     document.body.classList.toggle('drawer-open', on);
     btn.classList.toggle('active', on);
     btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    this.drawerOpen = on;
     app.charts.setOpen(on);
+    app.charts.hiddenTab = this.drawerTab !== 'charts';
+    app.familyTree.setOpen(on && this.drawerTab === 'tree');
     app.labLog.drawerOpen = on;
     if (on) this.hideHint();
     app.layoutChanged();
+  },
+  // The drawer shows either the charts or the family tree (the lab log stays beside both).
+  showDrawerTab: function (tab) {
+    var app = this.app;
+    this.drawerTab = tab;
+    var tc = document.getElementById('tab-charts'), tt = document.getElementById('tab-tree');
+    tc.classList.toggle('active', tab === 'charts'); tc.setAttribute('aria-selected', tab === 'charts');
+    tt.classList.toggle('active', tab === 'tree'); tt.setAttribute('aria-selected', tab === 'tree');
+    document.getElementById('charts').classList.toggle('hidden', tab !== 'charts');
+    document.getElementById('tree').classList.toggle('hidden', tab !== 'tree');
+    document.getElementById('drawer-note').textContent = tab === 'charts'
+      ? 'every chart covers the whole run so far · hover for values'
+      : 'each branch is a species, as thick as its population · hover for its story, click to find it in the terrarium';
+    app.charts.hiddenTab = tab !== 'charts';
+    if (tab === 'charts') app.charts.timer = 0;
+    app.familyTree.setOpen(this.drawerOpen && tab === 'tree');
   },
 
   // Screenshot mode: hide every panel (H). The terrarium keeps running.
@@ -139,6 +162,7 @@ GL.HUD.prototype = {
     var app = this.app, c = app.world.findById(app.world.stats.championId);
     this.hideHint();
     if (!c) return;
+    if (app.cinematic) app.cinematic.stop();
     this.dismissDeath();
     app.renderer.select(c);
     this.update(0, true);
@@ -155,7 +179,13 @@ GL.HUD.prototype = {
     tk.gen.set(s.maxGenerationEver);             // the highest generation ever reached: it never goes down
     tk.pop.set(world.creatures.length);
     tk.skill.set(s.skill);
-    tk.gen.update(dt); tk.pop.update(dt); tk.skill.update(dt);
+    tk.species.set(world.species.living);
+    tk.gen.update(dt); tk.pop.update(dt); tk.skill.update(dt); tk.species.update(dt);
+    var meatText = s.predators ? '◆' + s.predators : '';
+    if (meatText !== this._meatText) {
+      this._meatText = meatText; this.el.meat.textContent = meatText;
+      this.el.meat.title = s.predators + (s.predators === 1 ? ' meat-eater' : ' meat-eaters') + ' alive right now';
+    }
     // Save frame rate on slow devices: panels drop their live blur at low drawing quality.
     var lite = app.renderer.quality.level < GL.Config.render.liteGlassBelowLevel;
     if (lite !== this._lite) { this._lite = lite; document.body.classList.toggle('lite', lite); }
@@ -214,7 +244,8 @@ GL.HUD.prototype = {
 
   // ------------------------------------------------- when the followed bug dies
   showDeath: function (rec) {
-    var how = { starvation: 'starved', oldAge: 'died of old age', eaten: 'was eaten', disaster: 'was lost in a disaster' }[rec.cause] || 'died';
+    var how = { starvation: 'starved', oldAge: 'died of old age', eaten: 'was eaten' + (rec.killerId ? ' by #' + rec.killerId : ''),
+                disaster: 'was lost in a disaster' }[rec.cause] || 'died';
     this.death = { record: rec, until: performance.now() + GL.Config.render.followNextSeconds * 1000, next: null, label: '' };
     this.app.renderer.markDeath(rec);
     var el = this.el;
@@ -329,6 +360,8 @@ GL.HUD.prototype = {
         ' meals per hungry minute)\n' +
       'also       ' + w.stats.skillLuck.toFixed(2) + 'x luck, ' + w.stats.foodRate.toFixed(2) + ' food per bug per minute\n' +
       'steering   ' + Math.round(w.stats.steer * 100) + '% (luck ' + Math.round(w.stats.steerLuck * 100) + '%)\n' +
+      'meat-eaters ' + w.stats.predators + ' (' + w.stats.deaths.eaten + ' bugs eaten so far), ' + w.food.meatCount + ' meat pellets\n' +
+      'species    ' + w.species.living + ' alive, ' + w.species.list.length + ' ever\n' +
       'grid cells ' + w.creatureGrid.usedCells() + ' creature, ' + w.foodGrid.usedCells() + ' food\n' +
       'sim time   ' + Math.floor(t / 60) + ':' + ((t % 60) < 10 ? '0' : '') + (t % 60) + '\n' +
       'seed       ' + w.seed + '\n' +

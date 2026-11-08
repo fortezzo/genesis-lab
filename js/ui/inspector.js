@@ -24,12 +24,12 @@ GL.Inspector = (function () {
     clock: function (v) { return v.toFixed(2) + ' Hz'; }
   };
   var HELP = {
-    size: 'Body width. Bigger stores more energy but burns more.',
+    size: 'Body width. Bigger stores more energy, bites harder and takes longer to bring down, but burns more.',
     speed: 'Top walking speed. Above 7 mm/s, long legs turn more slowly.',
     turn: 'How fast it can turn.',
     sight: 'How far it can see.',
     fov: 'How wide it can see. Wider views make each slice vaguer.',
-    diet: '0 = plants, 1 = meat (meat-eating arrives in Session 3).',
+    diet: '0 = plants, 1 = meat. In-between diets digest both foods poorly; a rare gut switch flips a baby to the other side.',
     invest: 'Share of its energy each baby gets.',
     mutation: 'Chance each DNA number changes in its babies.',
     clock: 'Speed of its inner rhythm.'
@@ -44,7 +44,8 @@ GL.Inspector = (function () {
       death: $('insp-death'), energy: $('insp-energy'), energyV: $('insp-energy-v'), health: $('insp-health'),
       healthV: $('insp-health-v'), diet: $('insp-diet'), dietV: $('insp-diet-v'), genes: $('insp-genes'),
       life: $('insp-life'), family: $('insp-family'), radarNote: $('radar-note'),
-      scroll: document.querySelector('#inspector .insp-scroll'), more: $('insp-more'), genesSec: $('insp-genes-sec')
+      scroll: document.querySelector('#inspector .insp-scroll'), more: $('insp-more'), genesSec: $('insp-genes-sec'),
+      save: $('insp-save'), avgNote: $('insp-avg-note')
     };
     this.brainView = new GL.BrainView($('brain'), $('brain-tip'));
     this.radar = new GL.RadarView($('radar'));
@@ -54,7 +55,8 @@ GL.Inspector = (function () {
       key: '', id: 0, alive: false, brain: new Float32Array(GL.Genome.BRAIN_SIZE), genes: new Float32Array(GL.Genome.GENE_COUNT),
       inputs: new Float32Array(C.brainInputs), hidden: new Float32Array(C.brainHidden), outputs: new Float32Array(C.brainOutputs),
       hue: 190, fov: 2, sight: 150, generation: 0, parentId: 0, primitive: false, age: 0, energy: 0, maxEnergy: 1,
-      health: 0, maxHealth: 1, babies: 0, kills: 0, foodEaten: 0, turnSpeed: 0, radius: 0, fullRadius: 1
+      health: 0, maxHealth: 1, babies: 0, kills: 0, foodEaten: 0, meatEaten: 0, turnSpeed: 0, radius: 0, fullRadius: 1,
+      meat: false, digestMeat: 0, speciesId: 0, placed: ''
     };
     this.open = false;
     this.refreshTimer = 0;
@@ -66,6 +68,14 @@ GL.Inspector = (function () {
     this.el.more.dataset.act = 'more';
     this.el.scroll.addEventListener('scroll', function () { self.updateMoreCue(); }, { passive: true });
     this.el.close.addEventListener('click', function () { self.app.hud.dismissDeath(); self.app.renderer.select(null); self.app.hud.update(0, true); });
+    // Save to the Hall of Fame: the snapshot works even for a bug that just died.
+    this.el.save.addEventListener('click', function () {
+      var s = self.snap, sp = self.app.world.species.get(s.speciesId);
+      if (self.app.hallOfFame.save(s, sp ? sp.name : '')) {
+        self.el.save.classList.add('saved');
+        self.app.labLog.showToast({ text: 'Saved ' + (sp ? sp.name : 'specimen') + ' #' + s.id + ' to the Hall of Fame (Lab panel, key G).', kind: 'record' });
+      } else self.app.labLog.showToast({ text: self.app.hallOfFame.el.msg.textContent, kind: 'warn' });
+    });
     // Parent, children and "follow" buttons all work by click delegation.
     this.el.root.addEventListener('click', function (e) {
       var t = e.target.closest ? e.target.closest('[data-id],[data-act]') : null;
@@ -97,7 +107,8 @@ GL.Inspector = (function () {
     buildLife: function () {
       var cells = [['age', 'Age'], ['babies', 'Babies'], ['food', 'Food eaten'], ['gen', 'Generation'], ['kills', 'Kills'], ['score', 'Score']];
       var tips = { age: 'Old age starts at 2:48; nobody lives past 5:00.', score: 'Champion score: babies x 3 + minutes alive.',
-        kills: 'Hunting arrives in Session 3.', gen: 'How many parents back its family line goes.', food: 'Sprouts eaten in its life.' };
+        kills: 'Bugs it caught and killed (meat-eaters only).', gen: 'How many parents back its family line goes.',
+        food: 'Sprouts eaten in its life (pieces of meat, for a meat-eater).' };
       var html = '';
       cells.forEach(function (c) {
         html += '<div class="cell" title="' + (tips[c[0]] || '') + '"><span class="label">' + c[1] + '</span><div class="cv" data-cell="' + c[0] + '">-</div></div>';
@@ -111,12 +122,16 @@ GL.Inspector = (function () {
     // Copy what the panel needs from a living creature.
     capture: function (c) {
       var s = this.snap;
-      if (s.id !== c.id) { s.id = c.id; s.key = 'c' + c.id; s.brain.set(c.brain); s.genes.set(c.genes); this.familyKey = ''; this.refreshTimer = 0; }
+      if (s.id !== c.id) {
+        s.id = c.id; s.key = 'c' + c.id; s.brain.set(c.brain); s.genes.set(c.genes); this.familyKey = ''; this.refreshTimer = 0;
+        this.el.save.classList.remove('saved');
+      }
       s.alive = true;
       s.inputs.set(c.inputs); s.hidden.set(c.hidden); s.outputs.set(c.outputs);
       s.hue = c.hue; s.fov = c.fov; s.sight = c.sight; s.generation = c.generation; s.parentId = c.parentId;
       s.primitive = c.primitive; s.age = c.age; s.energy = c.energy; s.maxEnergy = c.maxEnergy;
       s.health = c.health; s.maxHealth = c.maxHealth; s.babies = c.babies; s.kills = c.kills; s.foodEaten = c.foodEaten;
+      s.meatEaten = c.meatEaten; s.meat = c.meat; s.digestMeat = c.digestMeat; s.speciesId = c.speciesId; s.placed = c.placed;
       s.turnSpeed = c.turnSpeed; s.radius = c.radius; s.fullRadius = c.fullRadius;
     },
 
@@ -160,12 +175,24 @@ GL.Inspector = (function () {
 
     refresh: function (c, death) {
       var s = this.snap, el = this.el, world = this.app.world, hud = this.app.hud, i;
+      var sp = world.species.get(s.speciesId);
       el.root.style.setProperty('--hue', Math.round(s.hue));
       el.root.classList.toggle('dead', !s.alive);
-      el.name.textContent = 'Specimen #' + s.id;
-      el.meta.textContent = 'Gen ' + s.generation + ' · ' + (s.primitive ? 'primitive, wandered in' : 'child of #' + s.parentId) +
-        ' · ' + (s.radius < s.fullRadius - 0.01 ? 'growing' : 'grown');
+      el.root.classList.toggle('meat', !!s.meat);
+      var nameKey = (sp ? sp.name : '') + '#' + s.id;
+      if (nameKey !== this._nameKey) {
+        this._nameKey = nameKey;
+        el.name.innerHTML = (sp ? '<i>' + sp.name + '</i> ' : 'Specimen ') + '<span class="num-id">#' + s.id + '</span>';
+        el.name.title = sp ? sp.name + ', a ' + (sp.meat ? 'meat-eating' : 'plant-eating') + ' species (' + (sp.count > 0 ? sp.count + ' alive' : 'extinct') + ')' : '';
+      }
+      var origin = s.placed === 'dropped' ? 'dropped in by you' : s.placed === 'hall' ? 'from the Hall of Fame' :
+                   s.primitive ? 'primitive, wandered in' : 'child of #' + s.parentId;
+      el.meta.textContent = 'Gen ' + s.generation + ' · ' + (s.meat ? 'meat-eater · ' : '') + origin + ' · ' + (s.radius < s.fullRadius - 0.01 ? 'growing' : 'grown');
       el.champ.classList.toggle('hidden', !(s.alive && world.stats.championId === s.id));
+      var full = this.app.hallOfFame.full() && !el.save.classList.contains('saved');
+      el.save.disabled = full;
+      el.save.title = full ? 'The Hall of Fame is full (20): remove one in the Lab panel first' :
+        el.save.classList.contains('saved') ? 'Saved in the Hall of Fame (Lab panel, key G)' : 'Save to the Hall of Fame, to bring it back later or share it as a code';
 
       // Death notice, with the next bug to follow.
       if (!s.alive && death) {
@@ -173,9 +200,12 @@ GL.Inspector = (function () {
         var key = rec.id + '|' + (death.next ? death.next.id : 0) + '|' + left + '|' + !!death.stay;
         if (key !== this.deathKey) {
           this.deathKey = key;
-          el.death.innerHTML = '<b>Specimen #' + rec.id + ' ' + (DEATH_WORDS[rec.cause] || 'died') + ' at age ' + hud.clock(rec.age) + '</b>' +
-            ' after eating ' + rec.foodEaten + (rec.foodEaten === 1 ? ' sprout' : ' sprouts') + ' and having ' + rec.babies +
-            (rec.babies === 1 ? ' baby.' : ' babies.') +
+          var how = DEATH_WORDS[rec.cause] || 'died';
+          if (rec.cause === 'eaten' && rec.killerId) how += ' by <i>' + (rec.killerName || 'a meat-eater') + '</i> #' + rec.killerId;
+          var ate = rec.meat ? rec.meatEaten + (rec.meatEaten === 1 ? ' piece of meat' : ' pieces of meat') + ', ' + rec.kills + (rec.kills === 1 ? ' kill' : ' kills')
+                             : rec.foodEaten + (rec.foodEaten === 1 ? ' sprout' : ' sprouts');
+          el.death.innerHTML = '<b>Specimen #' + rec.id + ' ' + how + ' at age ' + hud.clock(rec.age) + '</b>' +
+            ' after eating ' + ate + ' and having ' + rec.babies + (rec.babies === 1 ? ' baby.' : ' babies.') +
             '<div class="fam-row" style="margin-top:8px">' +
             (death.next ? '<button class="link" data-act="follow">Follow ' + death.label + ' #' + death.next.id + (left > 0 ? ' (' + left + ')' : '') + '</button>' : '') +
             (death.stay ? '<span class="fam-note">staying here: close the panel when you are done</span>'
@@ -195,13 +225,26 @@ GL.Inspector = (function () {
       var diet = s.genes[G.DIET];
       el.diet.style.left = (diet * 100).toFixed(1) + '%';
       el.dietV.textContent = FORMAT.diet(diet);
+      var foodWord = s.meat ? 'prey & meat' : 'food';
+      if (this._foodWord !== foodWord) {
+        this._foodWord = foodWord;
+        document.getElementById('radar-food-label').textContent = foodWord;
+        document.getElementById('radar-food-dot').className = 'dot ' + (s.meat ? 'prey' : 'food');
+      }
       el.radarNote.textContent = FORMAT.sight(s.sight) + ' · ' + Math.round(s.fov * 180 / Math.PI) + '°';
       el.radarNote.title = 'It sees ' + FORMAT.sight(s.sight) + ' far, across a ' + Math.round(s.fov * 180 / Math.PI) + '° view';
 
-      // Genes against the average of all living bugs.
-      var list = world.creatures, n = list.length, avg = this.avg;
+      // Genes against the average of its species (all living bugs if it is the only one of its kind left).
+      var list = world.creatures, n = 0, avg = this.avg, k;
       avg.fill(0);
-      for (i = 0; i < n; i++) for (var k = 0; k < GENES.length; k++) avg[k] += list[i].genes[k];
+      for (i = 0; i < list.length; i++) {
+        if (list[i].speciesId !== s.speciesId) continue;
+        n++; for (k = 0; k < GENES.length; k++) avg[k] += list[i].genes[k];
+      }
+      var own = n > 1;
+      if (!own) { n = list.length; avg.fill(0); for (i = 0; i < n; i++) for (k = 0; k < GENES.length; k++) avg[k] += list[i].genes[k]; }
+      var note = own ? 'average of its species (' + n + ')' : 'average of all living bugs';
+      if (el.avgNote.textContent !== note) el.avgNote.textContent = note;
       for (k = 0; k < GENES.length; k++) {
         var g = GENES[k], span = g.max - g.min, v = s.genes[k], ge = this.geneEls[k];
         var a = n ? avg[k] / n : v;
@@ -215,9 +258,9 @@ GL.Inspector = (function () {
       var old = s.age > C.lifespan * C.oldAgeStart;
       this.cells.age.innerHTML = hud.clock(s.age) + (old ? ' <small>old</small>' : '');
       this.cells.babies.textContent = s.babies;
-      this.cells.food.textContent = s.foodEaten;
+      this.cells.food.innerHTML = s.meat ? s.meatEaten + ' <small>meat</small>' : String(s.foodEaten);
       this.cells.gen.textContent = s.generation;
-      this.cells.kills.innerHTML = C.meatEating ? String(s.kills) : '<small>not yet</small>';
+      this.cells.kills.innerHTML = s.meat ? String(s.kills) : '<small>eats plants</small>';
       this.cells.score.textContent = (s.babies * C.championBabyWeight + s.age / 60 * C.championMinuteWeight).toFixed(1);
 
       this.refreshFamily(s, world);

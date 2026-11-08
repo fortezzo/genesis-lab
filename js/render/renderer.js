@@ -1,7 +1,8 @@
 // Genesis Lab - drawing: the renderer. All drawing happens here; it only READS
 // the simulation. Layers, back to front: lab bench, terrarium floor (soil, moss,
-// nutrient pads, lamp light, etched grid), far dust motes, sprouts, glowing
-// footprints, bugs (glow, legs, body, eyes, antennae), effects, the glass wall,
+// nutrient pads, lamp light, etched grid), meteor craters, the ice-age frost or the
+// drought haze, far dust motes, sprouts and meat, glowing footprints, bugs (glow,
+// legs, body, pincers, eyes, antennae), effects, falling meteors, the glass wall,
 // near dust motes, vignette. Only what is on screen gets drawn.
 var GL = GL || {};
 
@@ -25,6 +26,10 @@ GL.Renderer = function (canvas, world) {
   this.lastRaise = -999;          // ...and last went back up
   this.recoverWait = GL.Config.render.qualityRecoverSeconds;
   this.deathMark = null;          // where the followed bug died: { x, y, hue, radius, t }
+  this.highlightSpecies = 0;      // a species picked in the family tree or log: its members get rings
+  this.tool = null;               // god-mode tool under the pointer: { kind: 'meteor'|'drop'|'paint', x, y, on }
+  this.flash = 0;                 // a white flash when a meteor strikes (fades in real time)
+  this.shake = 0;                 // ...and a short camera shake
   this.view = { x0: 0, y0: 0, x1: 0, y1: 0 };
   this.wt = [1, 0, 0, 1, 0, 0];   // the world-space transform for this frame
   this.resize(true);
@@ -37,6 +42,7 @@ GL.Renderer.LEGS = [
   { ax: 0.16, ay: 0.40, angle: 1.62, bend: 0.25, femur: 0.55, tibia: 0.55 },
   { ax: -0.10, ay: 0.42, angle: 2.25, bend: 0.50, femur: 0.60, tibia: 0.65 }
 ];
+GL.Renderer.HUE_BUCKET = 8;       // legs and footprints are batched by colour in buckets this many degrees wide
 
 GL.Renderer.prototype = {
   resize: function (first) {
@@ -130,40 +136,60 @@ GL.Renderer.prototype = {
     v.x0 = cam.screenToWorldX(0) - pad; v.x1 = cam.screenToWorldX(w) + pad;
     v.y0 = cam.screenToWorldY(0) - pad; v.y1 = cam.screenToWorldY(h) + pad;
     this.effects.consume(world.events, this.quality, v);
+    if (this.effects.impact) { this.effects.impact = 0; this.flash = 1; if (!this.reducedMotion) this.shake = 1; }
     this.effects.update(dt);
+    var sx = 0, sy = 0;
+    if (this.shake > 0) {                                   // a short shake when a meteor strikes
+      this.shake = Math.max(0, this.shake - dt * 2.6);
+      var amp = 9 * this.shake * this.shake;
+      sx = Math.sin(this.time * 61) * amp; sy = Math.cos(this.time * 47) * amp;
+    }
     var wt = this.wt;
     wt[0] = dpr * z; wt[1] = 0; wt[2] = 0; wt[3] = dpr * z;
-    wt[4] = dpr * (w / 2 - cam.x * z); wt[5] = dpr * (h / 2 - cam.y * z);
+    wt[4] = dpr * (w / 2 - cam.x * z + sx); wt[5] = dpr * (h / 2 - cam.y * z + sy);
 
     // Screen-space backdrop: the lab bench.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     this.background.drawBase(ctx, w, h);
 
-    // World space: the terrarium floor.
+    // World space: the terrarium floor, craters, and the weather god mode brings.
     this.setWorldTransform();
     this.background.drawFloor(ctx, cam, world, this.quality, this.reducedMotion);
+    this.effects.drawCraters(ctx, cam);
+    this.drawWeather(ctx, cam);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.background.drawMotes(ctx, cam, world, 'far', this.quality);
 
     // World space: life.
     this.setWorldTransform();
     this.drawSprouts(ctx, cam);
+    this.drawMeat(ctx, cam);
     var showPrints = this.quality.footprints > 0 && !this.reducedMotion;
     this.updateFootprints(showPrints);
     if (showPrints && z >= GL.Config.render.footprintMinZoom) this.drawFootprints(ctx, cam);
     this.drawCreatures(ctx, cam);
     this.effects.draw(ctx, cam);
+    if (this.highlightSpecies) this.drawHighlight(ctx, cam);
     var sel = this.getSelected();
     if (sel) this.drawSelection(ctx, cam, sel);
     this.drawChampion(ctx, cam, sel);
     if (this.deathMark) this.drawDeathMark(ctx, cam);
+    this.drawMeteors(ctx, cam);
+    if (this.tool && this.tool.on) this.drawTool(ctx, cam);
     this.background.drawGlass(ctx, cam);
 
     // Screen space again.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.background.drawMotes(ctx, cam, world, 'near', this.quality);
     this.background.drawVignette(ctx, w, h);
+    if (this.flash > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255, 236, 205,' + (0.55 * this.flash * this.flash) + ')';
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+      this.flash = Math.max(0, this.flash - dt * 2.2);
+    }
   },
 
   // ---------------------------------------------------------------- sprouts
@@ -220,17 +246,50 @@ GL.Renderer.prototype = {
     ctx.globalAlpha = 1;
   },
 
+  // ---------------------------------------------------------------- meat
+  // Meat pellets: chunky amber nuggets with a dark outline and a hot core, so they stay easy to see
+  // even in a lamp's warm light. A faint amber glow underneath; they shrink and fade as they decay.
+  drawMeat: function (ctx, cam) {
+    var food = this.world.food, C = GL.Config, R = C.render, v = this.view, z = cam.zoom, S = GL.Sprites;
+    if (!food.meatCount) return;
+    var MEAT = GL.Food.MEAT, maxAge = C.meatMaxAge, size = C.meatRadius * R.meatSize, i, x, y, fade, s;
+    var far = size * z < 5, glow = S.glow(36, 1, 0.55), gs = C.meatRadius * R.meatGlow * 2;
+    var list = this._meatIdx || (this._meatIdx = new Int32Array(food.cap)), n = 0;
+    ctx.globalCompositeOperation = 'lighter';
+    for (i = 0; i < food.count; i++) {
+      if (!food.alive[i] || food.kind[i] !== MEAT) continue;
+      x = food.x[i]; y = food.y[i];
+      if (x < v.x0 || x > v.x1 || y < v.y0 || y > v.y1) continue;
+      list[n++] = i;
+      fade = Math.min(1, (maxAge - food.age[i]) / R.meatFadeTime, food.age[i] / 0.3);
+      if (far) continue;
+      ctx.globalAlpha = R.meatGlowAlpha * fade;
+      ctx.drawImage(glow, x - gs / 2, y - gs / 2, gs, gs);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    var dotImg = far ? S.meatDot() : null, dd = Math.max(R.meatDotPx / z, size * 0.9);
+    for (var k = 0; k < n; k++) {
+      i = list[k]; x = food.x[i]; y = food.y[i];
+      fade = Math.min(1, (maxAge - food.age[i]) / R.meatFadeTime, food.age[i] / 0.3);
+      ctx.globalAlpha = Math.max(0, fade);
+      if (far) { ctx.drawImage(dotImg, x - dd / 2, y - dd / 2, dd, dd); continue; }
+      s = size * (0.75 + 0.25 * fade) * S.MEAT_SIZE / 30;           // the nugget spans about 30 of 48 pixels
+      ctx.drawImage(S.meat(Math.floor(food.phase[i] / GL.M.TAU * 4) & 3), x - s / 2, y - s / 2, s, s);
+    }
+    ctx.globalAlpha = 1;
+  },
+
   // ------------------------------------------------------ per-bug drawing state
   // Drawing-only state lives on the creature in a private slot the simulation never reads.
   fxOf: function (c) {
     var fx = c.fx, n = GL.Config.render.footprintMax;
     if (!fx) fx = c.fx = { id: -1, fpx: new Float32Array(n), fpy: new Float32Array(n), fpt: new Float32Array(n),
                            head: 0, count: 0, lx: 0, ly: 0, side: 1, gait: 0, gx: 0, gy: 0, move: 0,
-                           px: 0, py: 0, ant: 0 };
+                           px: 0, py: 0, ant: 0, pinch: 0, spark: 0 };
     if (fx.id !== c.id) {                      // a pooled creature object reused for a new life
       fx.id = c.id; fx.head = 0; fx.count = 0; fx.lx = c.x; fx.ly = c.y; fx.side = 1;
       fx.gait = Math.random() * GL.M.TAU; fx.gx = c.x; fx.gy = c.y; fx.move = 0;
-      fx.px = 0; fx.py = 0; fx.ant = Math.random() * GL.M.TAU;
+      fx.px = 0; fx.py = 0; fx.ant = Math.random() * GL.M.TAU; fx.pinch = 0; fx.spark = 0;
     }
     return fx;
   },
@@ -255,14 +314,14 @@ GL.Renderer.prototype = {
   drawFootprints: function (ctx, cam) {
     var list = this.world.creatures, C = GL.Config, R = C.render, v = this.view, z = cam.zoom;
     var n = R.footprintMax, now = this.time, life = R.footprintLife * this.quality.footprints;
-    var BUCKETS = 6, hMin = C.plantHueMin, hSpan = C.plantHueMax - hMin + 0.01;
+    var HB = GL.Renderer.HUE_BUCKET, NB = Math.ceil(360 / HB);
     var paths = this._printPaths || (this._printPaths = []);
-    for (var b = 0; b < BUCKETS * 3; b++) paths[b] = null;
+    for (var b = 0; b < NB * 3; b++) paths[b] = null;
     for (var i = 0; i < list.length; i++) {
       var c = list[i], fx = c.fx;
       if (!fx || fx.id !== c.id || fx.count === 0) continue;
       if (c.x < v.x0 - 60 || c.x > v.x1 + 60 || c.y < v.y0 - 60 || c.y > v.y1 + 60) continue;
-      var bucket = Math.max(0, Math.min(BUCKETS - 1, Math.floor((c.hue - hMin) / hSpan * BUCKETS)));
+      var bucket = Math.floor(c.hue / HB) % NB;
       var rad = Math.max(c.radius * R.footprintSize, 0.6 / z);
       for (var k = 0; k < fx.count; k++) {
         var idx = (fx.head + k) % n, age = now - fx.fpt[idx];
@@ -274,8 +333,8 @@ GL.Renderer.prototype = {
       }
     }
     ctx.globalCompositeOperation = 'lighter';
-    for (b = 0; b < BUCKETS; b++) {
-      var hue = Math.round(hMin + (b + 0.5) / BUCKETS * hSpan);
+    for (b = 0; b < NB; b++) {
+      var hue = Math.round((b + 0.5) * HB);
       for (var tr = 0; tr < 3; tr++) {
         if (!paths[b * 3 + tr]) continue;
         ctx.fillStyle = 'hsla(' + hue + ',100%,70%,' + (R.footprintAlpha * [1, 0.55, 0.22][tr]) + ')';
@@ -290,8 +349,8 @@ GL.Renderer.prototype = {
     var list = this.world.creatures, C = GL.Config, R = C.render, v = this.view, z = cam.zoom;
     var S = GL.Sprites, tick = this.world.tick, eatTicks = R.eatFlashTime * C.ticksPerSecond;
     var detail = this._detail || (this._detail = []), legs = this._legs || (this._legs = []);
-    var close = this._close || (this._close = []), dot = S.dot();
-    detail.length = 0; legs.length = 0; close.length = 0;
+    var close = this._close || (this._close = []), dot = S.dot(), biters = this._biters || (this._biters = []);
+    detail.length = 0; legs.length = 0; close.length = 0; biters.length = 0;
     var dotBelowPx = 0.9;                                          // below this body radius on screen, a bug is a bright dot
     var minBody = R.creatureMinBodyPx / z;                         // otherwise its body is drawn at least this big
     // Glows first (additive light), so bodies sit on top of the bloom.
@@ -303,7 +362,8 @@ GL.Renderer.prototype = {
       var flash = tick - c.lastEatTick < eatTicks ? 1 - (tick - c.lastEatTick) / eatTicks : 0;
       var g = Math.max(c.radius * R.creatureGlow * 2 * (1 + flash * 0.35), R.creatureGlowMinPx / z);
       ctx.globalAlpha = R.creatureGlowAlpha * fade * (0.85 + flash * 0.6);
-      ctx.drawImage(S.glow(c.hue, 1, 0.58), c.x - g / 2, c.y - g / 2, g, g);
+      ctx.drawImage(S.glow(c.hue, 1, c.meat ? 0.55 : 0.58), c.x - g / 2, c.y - g / 2, g, g);
+      if (c.meat && tick - c.lastBiteTick <= 2) biters.push(c);
       if (c.radius * z < dotBelowPx && minBody <= 0) {             // tiny on screen: a white-hot point
         var d = R.creatureDotPx / z;
         ctx.globalAlpha = 0.95 * fade;
@@ -312,30 +372,31 @@ GL.Renderer.prototype = {
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
+    if (biters.length) this.drawStruggles(ctx, cam, biters);
     if (!detail.length) return;
 
     // Legs go under the bodies.
     for (i = 0; i < detail.length; i++) if (detail[i].radius * z >= R.legDetailPx) legs.push(detail[i]);
     if (legs.length) this.drawLegs(ctx, cam, legs);
 
-    // Bodies: each sprite turned to face the bug's heading.
+    // Bodies: each sprite turned to face the bug's heading. Meat-eaters have a spiky shell.
     var wt = this.wt, k0 = wt[0], scale = S.BODY_SIZE / S.BODY_R;
     for (i = 0; i < detail.length; i++) {
       c = detail[i];
       // Zoomed out, small bugs are drawn a little bigger than life so they still read as bugs, not dots
-      // (babies a bit smaller than adults).
-      var grown = c.radius / c.fullRadius, shown = Math.max(c.radius, minBody * (0.7 + 0.3 * grown));
+      // (babies a bit smaller than adults; meat-eaters a touch bigger, so their spikes show).
+      var grown = c.radius / c.fullRadius, shown = Math.max(c.radius, minBody * (0.7 + 0.3 * grown) * (c.meat ? 1.15 : 1));
       var s = shown * scale, ch = Math.cos(c.heading), sh = Math.sin(c.heading);
       ctx.setTransform(k0 * ch, k0 * sh, -k0 * sh, k0 * ch, wt[4] + k0 * c.x, wt[5] + k0 * c.y);
       ctx.globalAlpha = Math.min(1, (tick - c.bornTick) / 45);
-      ctx.drawImage(S.bug(c.hue), -s / 2, -s / 2, s, s);
+      ctx.drawImage(S.body(c.hue, c.meat), -s / 2, -s / 2, s, s);
     }
     ctx.globalAlpha = 1;
     this.setWorldTransform();
 
-    // Close up: antennae and eyes.
+    // Close up: pincers, antennae and eyes.
     for (i = 0; i < detail.length; i++) if (detail[i].radius * z >= R.detailPx) close.push(detail[i]);
-    if (close.length) { this.drawAntennae(ctx, cam, close); this.drawEyes(ctx, cam, close); }
+    if (close.length) { this.drawPincers(ctx, cam, close); this.drawAntennae(ctx, cam, close); this.drawEyes(ctx, cam, close); }
   },
 
   // Six legs in a tripod gait (front-left, middle-right and back-left step together, then the
@@ -344,10 +405,10 @@ GL.Renderer.prototype = {
   drawLegs: function (ctx, cam, list) {
     var C = GL.Config, R = C.render, z = cam.zoom, dt = Math.min(0.05, this._lastDt || 0.016);
     var LEGS = GL.Renderer.LEGS, TAU = GL.M.TAU, reach = R.legLength;
-    var BUCKETS = 6, hMin = C.plantHueMin, hSpan = C.plantHueMax - hMin + 0.01;
+    var HB = GL.Renderer.HUE_BUCKET, NB = Math.ceil(360 / HB);
     var TIERS = 3, tierAlpha = [0.3, 0.58, 0.85];                // legs fade in as a bug gets bigger on screen
     var paths = this._legPaths || (this._legPaths = []), widths = this._legWidths || (this._legWidths = []);
-    for (var b = 0; b < BUCKETS * TIERS; b++) { paths[b] = null; widths[b] = 0; }
+    for (var b = 0; b < NB * TIERS; b++) { paths[b] = null; widths[b] = 0; }
     for (var i = 0; i < list.length; i++) {
       var c = list[i], fx = this.fxOf(c), r = c.radius;
       var dx = c.x - fx.gx, dy = c.y - fx.gy, dist = Math.sqrt(dx * dx + dy * dy);
@@ -359,9 +420,9 @@ GL.Renderer.prototype = {
       fx.move += (moving - fx.move) * Math.min(1, dt * 12);
       var ch = Math.cos(c.heading), sh = Math.sin(c.heading);
       var show = GL.M.smoothstep(R.legDetailPx, R.legFullPx, r * z), tier = show < 0.4 ? 0 : (show < 0.8 ? 1 : 2);
-      var bucket = Math.max(0, Math.min(BUCKETS - 1, Math.floor((c.hue - hMin) / hSpan * BUCKETS))) * TIERS + tier;
+      var bucket = (Math.floor(c.hue / HB) % NB) * TIERS + tier;
       var p = paths[bucket] || (paths[bucket] = new Path2D());
-      var lw = Math.max(0.9 / z, r * 0.075);
+      var lw = Math.max(0.9 / z, r * (c.meat ? 0.09 : 0.075));
       if (lw > widths[bucket]) widths[bucket] = lw;
       for (var leg = 0; leg < 3; leg++) {
         var L = LEGS[leg];
@@ -383,13 +444,68 @@ GL.Renderer.prototype = {
       }
     }
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (b = 0; b < BUCKETS * TIERS; b++) {
+    for (b = 0; b < NB * TIERS; b++) {
       if (!paths[b]) continue;
-      var hue = Math.round(hMin + (Math.floor(b / TIERS) + 0.5) / BUCKETS * hSpan);
+      var hue = Math.round((Math.floor(b / TIERS) + 0.5) * HB);
       ctx.strokeStyle = 'hsla(' + hue + ',85%,60%,' + tierAlpha[b % TIERS] + ')';
       ctx.lineWidth = widths[b];
       ctx.stroke(paths[b]);
     }
+  },
+
+  // A meat-eater's pincers: two curved mandibles at the front of the head. They hang half open,
+  // open wide when it closes in on prey, and snap shut while it bites.
+  drawPincers: function (ctx, cam, list) {
+    var dt = Math.min(0.05, this._lastDt || 0.016), tick = this.world.tick, HEAD = GL.Sprites.HEAD, z = cam.zoom;
+    var paths = this._pincerPaths || (this._pincerPaths = {}), keys = [];
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (!c.meat) continue;
+      var fx = this.fxOf(c), biting = tick - c.lastBiteTick <= 3;
+      var hunting = c.lookPrey && c.lookAmount > 0.6;
+      var target = biting ? 1 : (hunting ? -0.35 : 0.1 + 0.08 * Math.sin(this.time * 2.1 + fx.ant));
+      fx.pinch += (target - fx.pinch) * Math.min(1, dt * (biting ? 26 : 9));
+      var r = c.radius, ch = Math.cos(c.heading), sh = Math.sin(c.heading), k = fx.pinch;
+      var key = Math.floor(c.hue / GL.Renderer.HUE_BUCKET);
+      var p = paths[key];
+      if (!p || p.frame !== this.time) { p = paths[key] = new Path2D(); p.frame = this.time; p.hue = c.hue; p.w = 0; keys.push(key); }
+      p.w = Math.max(p.w, r * 0.13, 0.9 / z);
+      for (var side = -1; side <= 1; side += 2) {
+        var bx = (HEAD.x + 0.1) * r, by = side * 0.2 * r;
+        var cx = (HEAD.x + 0.62) * r, cy = side * (0.46 - 0.2 * k) * r;
+        var tx = (HEAD.x + 0.66 + 0.06 * k) * r, ty = side * (0.07 + 0.22 * (1 - k)) * r;
+        p.moveTo(c.x + bx * ch - by * sh, c.y + bx * sh + by * ch);
+        p.quadraticCurveTo(c.x + cx * ch - cy * sh, c.y + cx * sh + cy * ch, c.x + tx * ch - ty * sh, c.y + tx * sh + ty * ch);
+      }
+    }
+    ctx.lineCap = 'round';
+    for (i = 0; i < keys.length; i++) {
+      var pp = paths[keys[i]];
+      ctx.strokeStyle = 'rgba(16, 4, 10, 0.75)'; ctx.lineWidth = pp.w * 1.7; ctx.stroke(pp);
+      ctx.strokeStyle = 'hsla(' + Math.round(pp.hue) + ', 95%, 72%, 0.95)'; ctx.lineWidth = pp.w; ctx.stroke(pp);
+    }
+  },
+
+  // A hunt in progress: red sparks fly at the biter's mouth and the victim pulses red.
+  drawStruggles: function (ctx, cam, biters) {
+    var z = cam.zoom, R = GL.Config.render, dt = Math.min(0.05, this._lastDt || 0.016), fxs = this.effects;
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < biters.length; i++) {
+      var c = biters[i], v = c.biteTarget, fx = this.fxOf(c);
+      if (!v || !v.alive) continue;
+      var mx = c.x + Math.cos(c.heading) * c.radius * 1.2, my = c.y + Math.sin(c.heading) * c.radius * 1.2;
+      fx.spark += dt * R.biteSparkRate * this.quality.particles;
+      while (fx.spark >= 1) {
+        fx.spark -= 1;
+        var a = Math.random() * GL.M.TAU, sp = 20 + Math.random() * 40;
+        fxs.add(GL.Effects.SPARK, mx, my, Math.cos(a) * sp, Math.sin(a) * sp, 0.35 + Math.random() * 0.25, 1.5 + Math.random() * 2, 352);
+      }
+      var pulse = 0.5 + 0.5 * Math.sin(this.time * 18 + c.id), rr = Math.max(v.radius * 1.6, 7 / z);
+      ctx.strokeStyle = 'rgba(255, 70, 110,' + (0.35 + 0.35 * pulse) + ')';
+      ctx.lineWidth = Math.max(1.2 / z, v.radius * 0.18);
+      ctx.beginPath(); ctx.arc(v.x, v.y, rr, 0, GL.M.TAU); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
   },
 
   // Two short antennae that twitch, and lean toward the food the bug is looking at.
@@ -397,14 +513,14 @@ GL.Renderer.prototype = {
     var R = GL.Config.render, z = cam.zoom, t = this.reducedMotion ? 0 : this.time;
     ctx.lineCap = 'round';
     for (var i = 0; i < list.length; i++) {
-      var c = list[i], fx = this.fxOf(c), r = c.radius, len = R.antennaLength * r;
+      var c = list[i], fx = this.fxOf(c), r = c.radius, len = R.antennaLength * r * (c.meat ? 0.75 : 1);
       var ch = Math.cos(c.heading), sh = Math.sin(c.heading);
       var lean = c.lookAmount > 0 ? Math.max(-0.6, Math.min(0.6, c.lookAngle)) * 0.5 : 0;
       ctx.beginPath();
       for (var side = -1; side <= 1; side += 2) {
         var wig = 0.12 * Math.sin(t * 4.3 + fx.ant + side * 1.3) + 0.05 * Math.sin(t * 11 + fx.ant * 2);
-        var a = side * 0.42 + lean + wig;
-        var bx = 1.04 * r, by = side * 0.1 * r;
+        var a = side * (c.meat ? 0.75 : 0.42) + lean + wig;
+        var bx = 1.04 * r, by = side * (c.meat ? 0.22 : 0.1) * r;
         var cx = bx + Math.cos(a * 0.45) * len * 0.55, cy = by + Math.sin(a * 0.45) * len * 0.55;
         var tx = bx + Math.cos(a) * len, ty = by + Math.sin(a) * len;
         ctx.moveTo(c.x + bx * ch - by * sh, c.y + bx * sh + by * ch);
@@ -417,23 +533,117 @@ GL.Renderer.prototype = {
   },
 
   // Two eyes on the head. Pupils glance toward the food it is looking at (smoothed so they don't jitter).
+  // Meat-eaters' eyes glow faintly red.
   drawEyes: function (ctx, cam, list) {
-    var whites = new Path2D(), pupils = new Path2D(), HEAD = GL.Sprites.HEAD;
+    var whites = new Path2D(), pupils = new Path2D(), red = new Path2D(), HEAD = GL.Sprites.HEAD, anyRed = false;
     for (var i = 0; i < list.length; i++) {
       var c = list[i], fx = this.fxOf(c), r = c.radius, h = c.heading;
       var look = c.lookAmount > 0 ? c.lookAngle : 0, tx = Math.cos(h + look), ty = Math.sin(h + look);
       fx.px += (tx - fx.px) * 0.15; fx.py += (ty - fx.py) * 0.15;
       var ch = Math.cos(h), sh = Math.sin(h), er = r * 0.17;
       for (var side = -1; side <= 1; side += 2) {
-        var lx = (HEAD.x + 0.08) * r, ly = side * 0.2 * r;
+        var lx = (HEAD.x + 0.08) * r, ly = side * (c.meat ? 0.24 : 0.2) * r;
         var ex = c.x + lx * ch - ly * sh, ey = c.y + lx * sh + ly * ch;
-        whites.moveTo(ex + er, ey); whites.arc(ex, ey, er, 0, GL.M.TAU);
+        var w = c.meat ? red : whites;
+        w.moveTo(ex + er, ey); w.arc(ex, ey, er, 0, GL.M.TAU);
+        if (c.meat) anyRed = true;
         var px = ex + fx.px * er * 0.45, py = ey + fx.py * er * 0.45, pr = er * 0.55;
         pupils.moveTo(px + pr, py); pupils.arc(px, py, pr, 0, GL.M.TAU);
       }
     }
     ctx.fillStyle = 'rgba(225, 245, 255, 0.95)'; ctx.fill(whites);
+    if (anyRed) { ctx.fillStyle = 'rgba(255, 196, 206, 0.95)'; ctx.fill(red); }
     ctx.fillStyle = '#050B18'; ctx.fill(pupils);
+  },
+
+  // A species picked in the family tree, the streamgraph or the lab log: a ring around each member.
+  drawHighlight: function (ctx, cam) {
+    var list = this.world.creatures, id = this.highlightSpecies, v = this.view, z = cam.zoom, any = false;
+    var sp = this.world.species.get(id);
+    if (!sp) { this.highlightSpecies = 0; return; }
+    var p = new Path2D(), pulse = 0.75 + 0.25 * Math.sin(this.time * 3);
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (c.speciesId !== id || c.x < v.x0 || c.x > v.x1 || c.y < v.y0 || c.y > v.y1) continue;
+      var r = Math.max(c.radius * 2.1, 9 / z);
+      p.moveTo(c.x + r, c.y); p.arc(c.x, c.y, r, 0, GL.M.TAU); any = true;
+    }
+    if (!any) return;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'hsla(' + Math.round(((sp.hue % 360) + 360) % 360) + ', 100%, 70%,' + (0.6 * pulse) + ')';
+    ctx.lineWidth = 1.6 / z;
+    ctx.stroke(p);
+    ctx.globalCompositeOperation = 'source-over';
+  },
+
+  // ------------------------------------------------------------ god mode
+  // Ice age: frost creeps over the terrarium. Drought: a dry, dusty haze.
+  drawWeather: function (ctx, cam) {
+    var g = this.world.god, C = GL.Config, R = C.terrariumRadius, M = GL.M;
+    var ice = g.iceLevel, dry = g.drought > 0 ? Math.min(1, g.drought / 4, (C.god.droughtSeconds - g.drought) / 2 + 0.2) : 0;
+    if (ice <= 0.01 && dry <= 0.01) return;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, M.TAU); ctx.clip();
+    if (dry > 0.01) {
+      ctx.fillStyle = 'rgba(150, 120, 70,' + (0.11 * dry) + ')';
+      ctx.fillRect(-R, -R, R * 2, R * 2);
+    }
+    if (ice > 0.01) {
+      var fr = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R);
+      fr.addColorStop(0, 'rgba(170, 215, 255,' + (0.05 * ice) + ')');
+      fr.addColorStop(0.75, 'rgba(200, 235, 255,' + (0.11 * ice) + ')');
+      fr.addColorStop(1, 'rgba(235, 248, 255,' + (0.30 * ice) + ')');
+      ctx.fillStyle = fr; ctx.fillRect(-R, -R, R * 2, R * 2);
+    }
+    ctx.restore();
+  },
+
+  // A meteor about to strike: a burning streak falling toward a target ring on the soil.
+  drawMeteors: function (ctx, cam) {
+    var list = this.world.god.meteors, z = cam.zoom, now = this.world.time, D = GL.Config.god;
+    if (!list.length) return;
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i], p = Math.max(0, Math.min(1, (now - m.from) / (m.at - m.from)));
+      ctx.setLineDash([10 / z, 8 / z]);
+      ctx.strokeStyle = 'rgba(255, 120, 60,' + (0.3 + 0.5 * p) + ')';
+      ctx.lineWidth = 2 / z;
+      ctx.beginPath(); ctx.arc(m.x, m.y, D.meteorRadius * (1.25 - 0.25 * p), 0, GL.M.TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      var e = p * p, fx = m.x - 1400 * (1 - e), fy = m.y - 1700 * (1 - e);
+      var tail = ctx.createLinearGradient(fx, fy, fx - 260, fy - 320);
+      tail.addColorStop(0, 'rgba(255, 230, 190, 0.95)'); tail.addColorStop(1, 'rgba(255, 120, 40, 0)');
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = tail; ctx.lineWidth = 18; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx - 260, fy - 320); ctx.stroke();
+      var gs = 160;
+      ctx.drawImage(GL.Sprites.glow(30, 1, 0.65), fx - gs / 2, fy - gs / 2, gs, gs);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  },
+
+  // The armed god-mode tool under the pointer: a target for the meteor, a drop zone, or the food brush.
+  drawTool: function (ctx, cam) {
+    var t = this.tool, z = cam.zoom, D = GL.Config.god, pulse = 0.6 + 0.4 * Math.sin(this.time * 5);
+    ctx.lineWidth = 1.6 / z;
+    if (t.kind === 'meteor') {
+      var r = D.meteorRadius;
+      ctx.strokeStyle = 'rgba(255, 110, 70,' + (0.5 + 0.4 * pulse) + ')';
+      ctx.setLineDash([8 / z, 6 / z]);
+      ctx.beginPath(); ctx.arc(t.x, t.y, r, 0, GL.M.TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(t.x - r * 0.25, t.y); ctx.lineTo(t.x + r * 0.25, t.y); ctx.moveTo(t.x, t.y - r * 0.25); ctx.lineTo(t.x, t.y + r * 0.25);
+      ctx.stroke();
+    } else if (t.kind === 'drop') {
+      ctx.strokeStyle = 'rgba(255, 61, 110,' + (0.5 + 0.4 * pulse) + ')';
+      ctx.setLineDash([5 / z, 5 / z]);
+      ctx.beginPath(); ctx.arc(t.x, t.y, D.dropSpread, 0, GL.M.TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (t.kind === 'paint') {
+      ctx.strokeStyle = 'rgba(102, 221, 79,' + (t.down ? 0.9 : 0.55) + ')';
+      ctx.fillStyle = 'rgba(102, 221, 79,' + (t.down ? 0.08 : 0.04) + ')';
+      ctx.beginPath(); ctx.arc(t.x, t.y, D.paintRadius, 0, GL.M.TAU); ctx.fill(); ctx.stroke();
+    }
   },
 
   // Where the followed bug died: a soft ring and a small cross that fade out.
@@ -455,32 +665,34 @@ GL.Renderer.prototype = {
 
   drawSelection: function (ctx, cam, c) {
     var z = cam.zoom, r = Math.max(c.radius * 2, 14 / z), t = this.time, M = GL.M;
+    var rgb = c.meat ? '255, 61, 110' : '34, 229, 255';
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = 'rgba(34, 229, 255, 0.85)';
+    ctx.strokeStyle = 'rgba(' + rgb + ', 0.85)';
     ctx.lineWidth = 1.6 / z;
     for (var k = 0; k < 4; k++) {                       // four rotating brackets
       var a = t * 0.8 + k * Math.PI / 2;
       ctx.beginPath(); ctx.arc(c.x, c.y, r, a, a + 0.9); ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(34, 229, 255,' + (0.18 + 0.12 * Math.sin(t * 3)) + ')';
+    ctx.strokeStyle = 'rgba(' + rgb + ',' + (0.18 + 0.12 * Math.sin(t * 3)) + ')';
     ctx.beginPath(); ctx.arc(c.x, c.y, r * 1.25, 0, M.TAU); ctx.stroke();
     if (this.debug) this.drawViewSlices(ctx, cam, c);
     else this.drawViewCone(ctx, cam, c);
     ctx.globalCompositeOperation = 'source-over';
   },
 
-  // The selected bug's field of view, faint on the soil; slices that see food glow green
-  // (the same picture as the radar in the inspector).
+  // The selected bug's field of view, faint on the soil; slices that see food glow green (red for a
+  // meat-eater's prey), the same picture as the radar in the inspector.
   drawViewCone: function (ctx, cam, c) {
     var R = GL.Config.render, IN = GL.Brain.IN, half = c.fov / 2, w = c.fov / 5, gain = GL.Config.foodSenseGain;
+    var food = c.meat ? '255, 120, 90' : '102, 221, 79', cone = c.meat ? '255, 61, 110' : '34, 229, 255';
     for (var s = 0; s < 5; s++) {
       var a0 = c.heading - half + s * w, f = c.inputs[IN.FOOD + s] / gain;
       if (f <= 0.01) continue;
-      ctx.fillStyle = 'rgba(102, 221, 79,' + (R.viewConeFoodAlpha * f) + ')';
+      ctx.fillStyle = 'rgba(' + food + ',' + (R.viewConeFoodAlpha * f) + ')';
       ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.sight, a0, a0 + w); ctx.closePath(); ctx.fill();
     }
     var g = ctx.createRadialGradient(c.x, c.y, c.radius, c.x, c.y, c.sight);
-    g.addColorStop(0, 'rgba(34, 229, 255,' + R.viewConeAlpha + ')'); g.addColorStop(1, 'rgba(34, 229, 255, 0)');
+    g.addColorStop(0, 'rgba(' + cone + ',' + R.viewConeAlpha + ')'); g.addColorStop(1, 'rgba(' + cone + ', 0)');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.sight, c.heading - half, c.heading + half); ctx.closePath(); ctx.fill();
   },
@@ -513,7 +725,7 @@ GL.Renderer.prototype = {
     var IN = GL.Brain.IN, half = c.fov / 2, w = c.fov / 5;
     for (var s = 0; s < 5; s++) {
       var a0 = c.heading - half + s * w, food = c.inputs[IN.FOOD + s], cre = c.inputs[IN.CREATURE + s];
-      ctx.fillStyle = 'rgba(102, 221, 79,' + (0.04 + food * 0.25) + ')';
+      ctx.fillStyle = 'rgba(102, 221, 79,' + (0.04 + food * 0.025) + ')';
       ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.sight, a0, a0 + w); ctx.closePath(); ctx.fill();
       if (cre > 0) {
         ctx.strokeStyle = 'rgba(255, 176, 32,' + (0.2 + cre * 0.5) + ')';
@@ -523,5 +735,9 @@ GL.Renderer.prototype = {
     }
     ctx.strokeStyle = 'rgba(140, 200, 255, 0.35)'; ctx.lineWidth = 1 / cam.zoom;
     ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.sight, c.heading - half, c.heading + half); ctx.closePath(); ctx.stroke();
+    // The mouth: food must touch this circle to be eaten.
+    var C = GL.Config, mr = c.radius * C.mouthRange + C.sproutRadius;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.beginPath(); ctx.arc(c.mouthX(), c.mouthY(), mr, 0, GL.M.TAU); ctx.stroke();
   }
 };

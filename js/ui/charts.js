@@ -71,10 +71,10 @@ GL.Charts = (function () {
       var X = function (t) { return L + (t - x0) / (x1 - x0) * pw; };
       var Y = function (v) { return T + ph - (v - y0) / (y1 - y0) * ph; };
 
-      // Grid and axes: faint, so the data leads.
+      // Grid and axes: faint, so the data leads. (A streamgraph has no value axis: it flows around its middle.)
       ctx.strokeStyle = U.chartGrid; ctx.lineWidth = 1; ctx.fillStyle = U.chartAxis;
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      var ticks = d.yTicks || [y0, (y0 + y1) / 2, y1];
+      var ticks = d.stream ? [] : (d.yTicks || [y0, (y0 + y1) / 2, y1]);
       for (var i = 0; i < ticks.length; i++) {
         var yy = Math.round(Y(ticks[i])) + 0.5;
         ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(L + pw, yy); ctx.stroke();
@@ -90,16 +90,18 @@ GL.Charts = (function () {
       }
       ctx.textAlign = 'left';
 
-      // Stacked areas first (bottom to top), with a thin gap line between layers.
+      // Stacked areas first (bottom to top), with a thin gap line between layers. A streamgraph stacks
+      // around the middle instead of up from zero, so it flows (each layer keeps its own thickness).
       var base = d.stack ? new Float32Array(n) : null;
       if (d.stack) {
+        if (d.stream) for (i = 0; i < n; i++) { var tot = 0; for (var q = 0; q < d.stack.length; q++) tot += d.stack[q].vals[i]; base[i] = -tot / 2; }
         for (var s = 0; s < d.stack.length; s++) {
           var st = d.stack[s];
           ctx.beginPath();
           for (i = 0; i < n; i++) { var top = base[i] + st.vals[i]; if (i === 0) ctx.moveTo(X(xs[i]), Y(top)); else ctx.lineTo(X(xs[i]), Y(top)); }
           for (i = n - 1; i >= 0; i--) ctx.lineTo(X(xs[i]), Y(base[i]));
           ctx.closePath();
-          ctx.globalAlpha = 0.75; ctx.fillStyle = st.color; ctx.fill(); ctx.globalAlpha = 1;
+          ctx.globalAlpha = st.alpha || 0.75; ctx.fillStyle = st.color; ctx.fill(); ctx.globalAlpha = 1;
           for (i = 0; i < n; i++) base[i] += st.vals[i];
           ctx.beginPath();
           for (i = 0; i < n; i++) { if (i === 0) ctx.moveTo(X(xs[i]), Y(base[i])); else ctx.lineTo(X(xs[i]), Y(base[i])); }
@@ -144,9 +146,17 @@ GL.Charts = (function () {
           ctx.lineWidth = 2; ctx.strokeStyle = '#081226'; ctx.stroke();
           rows.push('<i style="background:' + ln.color + '"></i>' + ln.name + ' <b>' + (ln.tipFmt || d.yFmt)(ln.raw ? ln.raw[best] : ln.vals[best]) + '</b>');
         });
-        (d.stack || []).slice().reverse().forEach(function (st) {
+        var layers = (d.stack || []).slice().reverse();
+        if (d.stackTipMax) {                                         // many layers: only the biggest ones at that moment
+          layers = layers.filter(function (st) { return st.vals[best] > 0; }).sort(function (a, b) { return b.vals[best] - a.vals[best]; });
+          var rest = layers.slice(d.stackTipMax).reduce(function (sum, st) { return sum + st.vals[best]; }, 0);
+          layers = layers.slice(0, d.stackTipMax);
+          if (rest > 0) layers.push({ name: 'others', color: 'rgba(140,160,190,0.6)', vals: (function () { var a = []; a[best] = rest; return a; })() });
+        }
+        layers.forEach(function (st) {
           rows.push('<i style="background:' + st.color + '"></i>' + st.name + ' <b>' + d.yFmt(st.vals[best]) + '</b>');
         });
+        if (d.tipTotal) rows.unshift('total <b>' + d.yFmt(d.tipTotal[best]) + '</b>');
         this.tip.innerHTML = '<span class="d" style="margin:0 0 3px">at ' + clock(xs[best]) + '</span>' + rows.join('<br>');
         this.tip.classList.remove('hidden');
         var tw = this.tip.offsetWidth, th = this.tip.offsetHeight, cvTop = this.canvas.offsetTop;
@@ -162,12 +172,14 @@ GL.Charts = (function () {
     this.app = app;
     var box = document.getElementById('charts');
     this.charts = {
+      species: new Chart(box, { title: 'Population by species', wide: true,
+        help: 'Every living bug, coloured by its species: plant-eaters in cyan to blue, meat-eaters in magenta to orange. A band starts when a species appears and ends when it dies out; related species flow side by side. Hover for the biggest species at that moment.' }),
       skill: new Chart(box, { title: 'Foraging skill', wide: true,
-        help: 'Meals found per minute spent hungry: the evolved bugs against random brains (invisible ghost bugs that copy real bugs’ bodies and places but think with fresh random brains). Food shortages hit both lines; the gap between them is what they have learned.' }),
-      pop: new Chart(box, { title: 'Population', help: 'Creatures alive. Species colours arrive with species in Session 3.' }),
+        help: 'Meals found per minute spent hungry: the evolved plant-eaters against random brains (invisible ghost bugs that copy real bugs’ bodies and places but think with fresh random brains). Food shortages hit both lines; the gap between them is what they have learned.' }),
+      prey: new Chart(box, { title: 'Hunted / hunters', help: 'Plant-eaters and meat-eaters alive. When hunters thrive, prey thin out; then the hunters go hungry and the prey recover.' }),
       traits: new Chart(box, { title: 'Average traits', help: 'Average genes of all living bugs, as a share of the range evolution can reach (0% = the smallest possible, 100% = the largest).' }),
-      steer: new Chart(box, { title: 'Steering', help: 'Of the walking bugs that can see food, the share pointed straight at it (within 20°), next to what luck alone would give.' }),
-      life: new Chart(box, { title: 'Births and deaths', help: 'Per minute. Deaths are split by cause; being eaten and disasters arrive in Session 3.' })
+      steer: new Chart(box, { title: 'Steering', help: 'Of the walking plant-eaters that can see food, the share pointed straight at it (within 20°), next to what luck alone would give.' }),
+      life: new Chart(box, { title: 'Births and deaths', help: 'Per minute, with deaths split by cause: starved, old age, eaten by a meat-eater, or lost in a disaster (a meteor).' })
     };
     this.timer = 0;
     this.open = false;
@@ -177,7 +189,7 @@ GL.Charts = (function () {
     setOpen: function (on) { this.open = on; this.timer = 0; },
 
     update: function (dt) {
-      if (!this.open) return;
+      if (!this.open || this.hiddenTab) return;
       this.timer -= dt;
       if (this.timer > 0) return;
       this.timer = U.chartRefresh;
@@ -200,7 +212,7 @@ GL.Charts = (function () {
     build: function () {
       var w = this.app.world, s = w.stats, h = s.history, n = h.time.length;
       var width = this.charts.skill.canvas.clientWidth || 400;
-      var idx = this.indices(n, width), smallIdx = this.indices(n, this.charts.pop.canvas.clientWidth || 260);
+      var idx = this.indices(n, width), smallIdx = this.indices(n, this.charts.traits.canvas.clientWidth || 260);
       var pick = function (arr, ix, k) { var out = new Array(ix.length); for (var i = 0; i < ix.length; i++) out[i] = arr[ix[i]] * (k || 1); return out; };
       var xsOf = function (ix) { return pick(h.time, ix); };
       var maxOf = function (arrs) { var m = 0; arrs.forEach(function (a) { for (var i = 0; i < a.length; i++) if (a[i] > m) m = a[i]; }); return m; };
@@ -229,14 +241,19 @@ GL.Charts = (function () {
         lines: [{ name: 'random brains', color: U.chartGhost, vals: gh, dash: true },
                 { name: 'evolved bugs', color: U.chartEvolved, vals: ev, fill: 'rgba(22, 157, 179, 0.25)' }] });
 
-      // Population.
-      var pop = pick(h.population, smallIdx), cap = w.cap;
-      ch = this.charts.pop;
-      ch.val.innerHTML = w.creatures.length + '<small>of ' + cap + '</small>';
-      ch.legend.innerHTML = '<span>creatures alive</span>';
+      // Population by species: a streamgraph in species colours, in family order.
+      this.buildSpecies(w, width);
+
+      // Hunters and hunted: plant-eaters and meat-eaters alive.
+      var cap = w.cap, popArr = pick(h.population, smallIdx), predArr = pick(h.predators, smallIdx);
+      var preyArr = popArr.map(function (v, i) { return v - predArr[i]; });
+      ch = this.charts.prey;
+      ch.val.innerHTML = s.prey + ' <small>/</small> ' + s.predators;
+      ch.legend.innerHTML = '<span><i style="background:' + U.chartPrey + '"></i>plant-eaters</span><span><i style="background:' + U.chartPred + '"></i>meat-eaters</span>';
       ch.setData({ xs: xsOf(smallIdx), yMax: cap * 1.08, yTicks: [0, Math.round(cap / 2), cap], yFmt: function (v) { return Math.round(v); },
         refs: [{ v: cap, label: 'cap' }],
-        lines: [{ name: 'population', color: U.chartPop, vals: pop, fill: 'rgba(22, 157, 179, 0.22)' }] });
+        lines: [{ name: 'plant-eaters', color: U.chartPrey, vals: preyArr, fill: 'rgba(22, 157, 179, 0.18)' },
+                { name: 'meat-eaters', color: U.chartPred, vals: predArr, fill: 'rgba(222, 80, 137, 0.22)' }] });
 
       // Average traits, each as a share of its gene's range (one shared 0-100% axis).
       var lines = [], leg = [], self = this;
@@ -287,6 +304,36 @@ GL.Charts = (function () {
         stack.map(function (x) { return '<span><i class="box" style="background:' + x.color + '"></i>' + x.name + '</span>'; }).join('');
       ch.setData({ xs: xsOf(smallIdx), yMax: top, yFmt: function (v) { return Math.round(v); }, stack: stack,
         lines: [{ name: 'births', color: U.chartBirths, vals: births }] });
+    },
+
+    // The streamgraph: one band per species that ever had a few members (the rest share a grey "others"
+    // band), stacked around the middle, in family order so related species lie side by side.
+    buildSpecies: function (w, width) {
+      var spc = w.species, times = spc.times, n = times.length, ch = this.charts.species, minM = GL.Config.species.logMinMembers;
+      if (n < 2) { ch.setData({ xs: [0], yMax: 1, yFmt: String }); return; }
+      var step = Math.max(1, Math.ceil(n / Math.max(60, width))), idx = [];
+      for (var i = 0; i < n; i += step) idx.push(i);
+      if (idx[idx.length - 1] !== n - 1) idx.push(n - 1);
+      var order = GL.FamilyTree.familyOrder(w), stack = [], others = new Array(idx.length).fill(0), total = new Array(idx.length).fill(0);
+      order.forEach(function (sp) {
+        var vals = new Array(idx.length), any = false;
+        for (var k = 0; k < idx.length; k++) {
+          var v = spc.countAt(sp, idx[k]);
+          vals[k] = v; total[k] += v; if (v) any = true;
+        }
+        if (!any) return;
+        if (sp.peak < minM) { for (k = 0; k < idx.length; k++) others[k] += vals[k]; return; }
+        var hue = Math.round(((sp.hue % 360) + 360) % 360);
+        stack.push({ name: sp.name + (sp.meat ? ' (meat)' : ''), color: 'hsl(' + hue + ', 85%, ' + (sp.meat ? 60 : 55) + '%)', vals: vals, alpha: 0.85 });
+      });
+      stack.push({ name: 'others (small species)', color: 'rgba(140, 160, 190, 0.55)', vals: others, alpha: 0.6 });
+      var top = 1; for (i = 0; i < total.length; i++) top = Math.max(top, total[i]);
+      var xs = idx.map(function (k) { return times[k]; }), living = spc.living, meatAlive = 0;
+      for (i = 0; i < spc.list.length; i++) if (spc.list[i].meat && spc.list[i].count > 0) meatAlive++;
+      ch.val.innerHTML = w.creatures.length + '<small>bugs</small> ' + living + '<small>' + (living === 1 ? 'species' : 'species') + (meatAlive ? ', ' + meatAlive + ' meat-eating' : '') + '</small>';
+      ch.legend.innerHTML = '<span>each band is a species: cyan to blue eat plants, magenta to orange eat meat</span>';
+      ch.setData({ xs: xs, yMin: -top * 0.55, yMax: top * 0.55, yFmt: function (v) { return Math.round(v); }, stream: true, stack: stack,
+        stackTipMax: 6, tipTotal: total });
     }
   };
 

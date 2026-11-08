@@ -112,20 +112,21 @@ The terrarium is a 4,000-unit-wide circle of soil where sprouts grow under drift
 | Food | Where it comes from | Energy | Behavior |
 | --- | --- | --- | --- |
 | Sprouts | Grow under the heat lamps, up to 1,500 at once | 25 | Grow in, sway softly, stay where they grew, and wither after 2 minutes if nobody eats them |
-| Meat | Left behind when a creature dies (from Session 3) | Most of the dead creature's stored energy | Glows amber and decays after 60 seconds |
+| Meat | Left behind when a creature dies (from Session 3) | 30% of the dead creature's stored energy plus a little for its body (0.3 × size²), in pellets of up to 30 | Chunky amber nuggets with a dark outline and a hot core (easy to see even in lamp light); decay after 60 seconds |
 
 - **A sparse start:** a new world begins with only 60 sprouts (`sproutStart: 60`), so the first random creatures have to find food instead of bumping into it.
 - **Wide, thin feeding grounds:** sprouts grow in patches about 700 units wide around each lamp (`lampSpread: 700`), and 20% of new sprouts come up on open soil (`sproutOpenGroundChance: 0.2`).
-- Sprouts regrow at up to 32 per second at average lamp brightness when the terrarium is bare, slowing as it fills (`sproutGrowthRate: 32`). This is a balance: more food keeps adults alive longer, but with too much food steering toward it stops paying, and it evolves less reliably. (It was 34 before the speed trade-off; slower bugs need less food.)
+- Sprouts regrow at up to 38 per second at average lamp brightness when the terrarium is bare, slowing as it fills (`sproutGrowthRate: 38`). This is a balance: more food keeps adults alive longer, but with too much food steering toward it stops paying. (It was 34, then 32 after the speed trade-off; Session 3 raised it to 38 because bugs now eat with their mouths, which finds less food by luck, and well-fed prey escape hunters more often.)
 - **No wasteful grazing:** a bug only eats a sprout it has room for (`eatOnlyWithRoom`). Nearly full bugs used to nibble every sprout they touched and waste most of it, stripping the terrarium; now they leave it for hungry bugs and babies.
+- **Eating with the mouth (Session 3):** food must touch the front of a bug's head (`eatWithMouth`, a mouth circle 0.35 × its radius plus the food's size, at the tip of the head), not any part of its body. See section 5.
 
 **Population limits**
 
-- Start: 90 random creatures (`startCreatures: 90`). With 60, the first minutes often looked empty: many worlds dipped to about 20 bugs.
+- Start: 100 random creatures (`startCreatures: 100`). With 60, the first minutes often looked empty: many worlds dipped to about 20 bugs. It was 90 until Session 3; with the mouth, random brains find less food by luck, and 100 keeps the start as lively as before.
 - Floor: below 20 creatures, new primitive creatures wander in, so the world never dies. The lab log records each arrival.
 - Settling in: every primitive creature (the 90 starters and each newcomer) arrives with a full tank (`startEnergy: 1.0`) but must wait 30 seconds before it can have a baby (`primitiveSettleTime: 30`). The wait keeps minute 1 a fair measure of random brains, instead of one lucky family multiplying. The full tank matters because the air is still: nothing drifts a newcomer into food, so it needs the fuel to walk to a feeding ground. (The ocean version used 90%; in the terrarium that caused twice as many early population crashes.)
 - Cap: 400 creatures on laptops and 150 on phones. At the cap, nobody can reproduce until there's room, and each free place goes to the best-fed creature that wants a baby (`capBestFed`). Without that rule, a free place went to whoever happened to come first, and evolution stalled once the terrarium was full.
-- The population still reaches the cap about a third of the time after minute 10, with dips to about 220-260 in between (before the lamp-driven food supply it rarely fell below 300). Keeping it lower would take less food, and that shortens lives, so this is left for Session 3: predators should hold the population below the cap, with real booms and crashes for the population chart and the lab log.
+- The population still touches the cap in most minutes after minute 10, with dips to about 180-280 in between. Session 3's predators help only a little: over an hour, the terrarium is at the cap in about 61% of minutes with meat-eaters against 76% without them (10 worlds), with real booms and crashes when they multiply. Hunters strong enough to hold the population well below the cap (at the cap in only 25% of minutes) also cut the life of a clicked adult to about 51 seconds, failing the health check in section 10, so the gentler setting was kept (`preyStruggle`, section 5). Raising hunting pressure again is a one-number change if the trade feels worth it.
 
 ## 5. The creatures
 
@@ -147,11 +148,13 @@ Each creature is a little glowing bug: 9 body genes plus a 390-number brain. Eve
 
 **Why in-between diets lose:** plant digestion = (1 − diet)² and meat digestion = diet². A pure plant-eater gets 100% from sprouts, but a 50/50 creature gets only 25% from each food. This jack-of-all-trades penalty pushes family lines to specialize, which is what splits predators from prey.
 
+**How a meat-eater line starts (Session 3):** every primitive creature eats plants. Because in-between diets lose, evolution can't walk from plants to meat one small step at a time, so about 1 baby in 200 is born with the opposite diet from its parent (`dietSwitchChance: 0.005`), a rare gut switch. The new meat-eater keeps its parent's brain, which already steers toward food, and to a meat-eater a living plant-eater counts as food (below), so it starts chasing at once. It lives through its first minutes on the meat that every dead body leaves. Most switched lines die out; a few take hold.
+
 **Senses: 25 brain inputs**
 
 | Input | Count | Meaning |
 | --- | --- | --- |
-| Food per view slice | 5 | How close the nearest food is, weighted by how nutritious it is for this creature's diet (a strong signal: 0 to 8, see below) |
+| Food per view slice | 5 | How close the nearest food is, weighted by how nutritious it is for this creature's diet (a strong signal: 0 to 8, see below). To a meat-eater, living plant-eaters count as food too (`preyFoodSense: 1`) |
 | Creature per view slice | 5 | How close the nearest creature is |
 | Size per view slice | 5 | That creature's size compared with mine: −1 much smaller, +1 much bigger |
 | Glass wall | 3 | How close the wall is, plus two numbers for which way the center lies |
@@ -173,7 +176,7 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 | --- | --- |
 | Thrust | Walk forward, from 0 to top speed |
 | Turn | Turn left or right, up to turn speed |
-| Bite | Attack whatever touches its mouth (does nothing until Session 3) |
+| Bite | Close its pincers on whatever touches its mouth (only a meat-eater's bite does damage) |
 | Reproduce | Try to have a baby, if it's mature and has enough energy |
 | Memory 1 and Memory 2 | Store two values for the next tick |
 
@@ -184,6 +187,8 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 **No free speed:** long legs built for speed are clumsy. Above a top speed of 70, a bug turns more slowly: its turn rate is multiplied by (70 / top speed)^1.5 (`agilitySpeed: 70`, `agilityExp: 1.5`), so at 140 it turns at 35% of its turn gene. Without this, top speed was a free upgrade, because it costs nothing until it's used, and in every world it climbed to the 150 ceiling (38-96% of bugs at 140 or more by minute 60). Fast bugs now overshoot food and have to slow down to steer, so speed settles around 90-125 with real variety, leaving room for Session 3's predators to evolve a chase. An energy cost for leg muscles (paid even at rest) was tried first, but it had to be so high to stop the race that adults starved younger. The turn-speed gene still creeps slowly toward its own ceiling of 6 over an hour, as it did before; if Session 2 charts it, consider a similar trade-off for it.
 
 **Turning takes effort:** legs can't reverse a turn instantly, so the actual turn eases toward what the brain asks for within about a tenth of a second (`turnResponse: 10`), and bugs swing smoothly instead of twitching. Turning also costs energy (`turnCost: 0.3`), so walking in endless circles is wasteful and turning toward food pays.
+
+**Eating with the mouth (Session 3):** a bug eats food that touches the tip of its head, not its side or back (`eatWithMouth`). In every world, walking bugs learn to keep food at one spot in their view and turn toward it; in about a third of worlds that spot was 40° to one side, and they spiralled in on food, which worked almost as well when any part of the body could eat. With a mouth, pointing straight at food pays, and steering "clearly rises" by minute 10 in about 86% of worlds instead of 64% (80 worlds each). Turning speed, agility, food-sense strength and turn costs were all tried first and changed nothing.
 
 **Strong food senses:** the five food inputs run from 0 to 8 instead of 0 to 1 (`foodSenseGain: 8`). With a weak signal, a newborn brain barely reacts to food, and mutation needed dozens of lucky steps to build steering, so in most worlds it never appeared in time. With a strong signal, random brains already react strongly to food (about half turn toward it and half away) and evolution only has to pick the right half. A test showed the world rewards steering hugely: 30 hand-built steering bugs dropped into an evolved population out-ate the natives two to three times and took over within 3 minutes. Nothing is pre-programmed: the direction of every response is still random at birth.
 
@@ -196,12 +201,15 @@ The field of view is split into 5 equal slices. Each creature asks the spatial g
 - Old age: past 70% of a 4-minute lifespan, upkeep climbs until the creature dies and makes room.
 - Every starting number lives in config.js with a comment, so balancing means editing numbers, not rewriting code.
 
-**Fighting (from Session 3)**
+**Fighting (Session 3)**
 
-- With bite on and another creature touching its mouth, a creature deals damage per second based on its size × diet.
-- Bigger targets take longer to bring down, and biting costs energy.
-- A kill leaves meat pellets worth most of the victim's stored energy.
+- With bite on and another creature touching its mouth, a creature deals damage per second based on its size × how well it digests meat (diet², so a plant-eater's bite does nothing): `biteDamage: 6`.
+- Bigger targets take longer to bring down (health grows with size²), and biting costs a little energy per point of damage (`biteCost: 0.01`).
+- Pincers hold: a victim up to 1.15 times the biter's size is held at the mouth and dragged along (`biteHoldSize`), and the biter walks at half speed while it drags it. Once the pincers close on a victim they stay shut for a second (`biteLock`), then open only when the bite output drops below −0.5 (`biteRelease`); in a crowd they keep biting the same victim. A bite never hurts the biter's own species, and a bitten bug can't heal until it gets away.
+- A held victim struggles: at full energy it breaks free in about a fifth of a second, at half energy in twice that (`preyStruggle: 4.5`), so hunters mostly catch the hungry and weak, as real predators do.
+- Every death leaves meat pellets: 30% of the dead bug's stored energy plus 0.3 × size² for its body, so scavengers can live on the dead.
 - Meat-eaters look the part: they grow pincers and a spiky shell (see section 7).
+- Why it took six changes (each found by tracing why hunts failed): a costly bite made evolution switch biting off; bodies don't collide, so hunters ran straight over their prey (the hold); a new meat-eater's bite reflexes are random, so it let go of prey the moment it was straight ahead (the lock and release rule); in crowds the pincers switched victims every tick; a final bite left a victim at −0.001 health and its healing saved it, so for a while only starving prey ever died; and once kills worked, whole bodies as meat fed hunters three times what they burned, so they boomed to 200-300 and wiped out their prey (small meals and the struggle fixed that).
 
 **Babies**
 
@@ -226,7 +234,10 @@ Species form automatically when a family line drifts far enough from its founder
 
 - Every species remembers its founder's DNA.
 - Genetic distance = the average gene difference (each gene scaled to its range) plus the average brain-number difference (also scaled), on a 0–1 scale.
-- A baby more than 0.35 from its species' founder starts a new species, with itself as the founder.
+- A baby more than 0.15 from its species' founder starts a new species, with itself as the founder (`splitDistance: 0.15`). The plan said 0.35, but families drift only about 0.006 a minute, so at 0.35 no species formed within an hour; at 0.15 the first ones branch off around minutes 10-15.
+- Before founding a new species, a baby joins a living species of its diet whose founder is within 0.15, so two cousins that drift apart at the same moment stay one species. A baby born with the other diet (the gut switch) always starts a new species.
+- The 100 starting bugs are one species, but each of them is compared with its own random DNA, since they aren't related to each other.
+- A new species is announced in the lab log once it has 5 members alive at once, so one-offs that die at once don't flood it.
 
 **Names**
 
@@ -246,6 +257,7 @@ A live feed of short lines, for example:
 - *Folivora prima* went extinct after 41 generations
 - Population crash: 63% of life lost in the drought
 - Record: specimen #4821 lived 6 minutes and had 23 babies
+- Also (Session 3): the first gut switch ("specimen #163 was born a meat-eater, the first one"), hunting records, the last meat-eater dying out, crashes blamed on the drought, ice age, meteor or hunting, and everything done in god mode. Lines about a species can be clicked to ring its members in the terrarium.
 
 **Champion**
 
@@ -257,6 +269,7 @@ A live feed of short lines, for example:
 - A branching timeline of species: each branch starts when a species appears and ends when it dies out.
 - Branch thickness shows population. Living species glow; extinct ones fade to gray.
 - Click a branch to highlight that species in the terrarium.
+- Built in Session 3 as a tab in the charts drawer, next to the charts. Meat-eater branches carry small spikes, so diet reads by shape too; hovering a branch tells its story (when and from what it appeared, its peak, generations and kills). Only species that ever had 5 members at once are drawn.
 
 ## 7. Visual style guide
 
@@ -341,7 +354,7 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 - Top bar: logo, generation, population, species count and speed controls.
 - Generation shows the highest generation ever reached, so it never goes backwards when an old family line dies out.
 - Foraging skill shows "5.3× random brains", a pill like "▲ from 1.1×" (the first minute's value, when every bug still had a random brain), and a short line a stranger understands: "how much faster they find food than random brains in the same spots".
-- Left panel (collapsible): world controls and settings, plus god mode from Session 3.
+- Left panel (collapsible): world controls and settings, plus god mode from Session 3. Built in Session 3 as the "Lab" panel (key G) with two tabs: God mode (Drought, Sprout bloom, Ice age, Meteor strike, Predator drop, Paint food, with countdowns while effects last) and the Hall of Fame. Settings arrive in Session 4.
 - Right panel: the inspector, opened by clicking a creature.
 - Bottom drawer: charts and the lab log.
 
@@ -384,7 +397,10 @@ The terrarium fills the screen, panels slide in only when needed, and one click 
 | Space | Pause or resume |
 | 1, 2, 3, 4, 5 | Speed 1x, 2x, 4x, 16x, Max |
 | F | Follow the champion |
-| Esc | Deselect |
+| C | Charts, family tree and lab log (Session 2) |
+| G | God mode and the Hall of Fame (Session 3) |
+| V | Cinematic camera (Session 3) |
+| Esc | Put away an armed god-mode tool, stop the cinematic camera, or deselect |
 | H | Hide all panels (screenshot mode) |
 | P | Save a screenshot |
 | Backtick | Debug overlay |
@@ -515,7 +531,7 @@ Two older measures stay in the report for reference. "Times faster than luck" (m
 - Over 60 simulated minutes, average top speed stays well below the 150 ceiling with real variety (minute 60: about 90-125 per world, few bugs at 140 or more).
 - Population stays between 25% and 100% of the cap for 30 simulated minutes, once it has boomed to half the cap. (The check starts there because a world now begins with 90 bugs, so it can pass a quarter of the cap within a minute and dip below it again while the starters die out.)
 - Once creatures have evolved, the population floor kicks in less than once per 10 simulated minutes.
-- From Session 3: a meat-eater species appears in at least 3 of 5 seeds within 20 simulated minutes, and prey survive alongside it.
+- From Session 3: a meat-eater species appears in at least 3 of 5 seeds within 20 simulated minutes, and prey survive alongside it. The headless test counts it when one meat-eater species has 10 or more members alive at once by minute 20 and the plant-eaters never fall below 100 (a quarter of the cap) from then on. It also reports when the first meat-eater was born, how many were alive at most, how many bugs were eaten, how often the population sat at the cap, and how many babies that never ate were eaten rather than starved.
 
 **Your test checklist, every session**
 
@@ -596,17 +612,19 @@ Don't start a session until the gate before it passes. The times are estimates; 
 
 **Session 3 · Predators, species and god mode (2–3 hours)**
 
-- [ ] Meat-eating, biting, meat pellets and the predator look: meat-eaters grow pincers and a spiky shell
-- [ ] Meat pellets must stay easy to see inside the lamp light: amber meat on warm orange light can disappear, so give meat its own shape and a dark outline or brighter core, and check it in a screenshot under a lamp
-- [ ] Predators should keep the population below the cap, with booms and crashes (section 4), and have a chase to evolve now that prey speed varies (section 5)
-- [ ] Species detection, generated names and family colors
-- [ ] Species streamgraph and family tree
-- [ ] Lab log lines for new species, extinctions and crashes
-- [ ] God mode: Drought, Sprout bloom, Meteor strike (click to drop), Ice age, Predator drop and Paint food
-- [ ] Hall of Fame: save up to 20 creatures, spawn them back, and share them as codes
-- [ ] Cinematic camera that cruises between births, hunts and crowds
+- [x] Meat-eating, biting, meat pellets and the predator look: meat-eaters grow pincers and a spiky shell
+- [x] Meat pellets must stay easy to see inside the lamp light: amber meat on warm orange light can disappear, so give meat its own shape and a dark outline or brighter core, and check it in a screenshot under a lamp
+- [ ] Predators should keep the population below the cap, with booms and crashes (section 4), and have a chase to evolve now that prey speed varies (section 5). Partly: hunters chase and there are booms and crashes, but they only cut the time at the cap from about 76% to 61% of minutes (see the notes below)
+- [x] Species detection, generated names and family colors
+- [x] Species streamgraph and family tree
+- [x] Lab log lines for new species, extinctions and crashes
+- [x] God mode: Drought, Sprout bloom, Meteor strike (click to drop), Ice age, Predator drop and Paint food
+- [x] Hall of Fame: save up to 20 creatures, spawn them back, and share them as codes
+- [x] Cinematic camera that cruises between births, hunts and crowds
 
 **Gate 3:** predators appear on their own in at least 3 of 5 seeds within 20 simulated minutes, prey survive, and you can tell a story from one run. Commit: "Session 3: predators, species, god mode".
+
+**Session 3 notes.** The gate passes. In tools/headless.html in Chrome, a meat-eater species appeared by itself (10 or more alive at once) within 20 simulated minutes, with plant-eaters never dropping below 100 from then on, in 4 of seeds 1-5 (seed 2 at minute 12.7, lowest prey count afterwards 293; seed 3 at 13.1, 277; seed 4 at 7.6, 285; seed 5 at 12.5, 329; in seed 1 meat-eaters never grew past 7) and in 18 of 20 worlds. Every earlier health check still passes in Chrome: foraging skill doubled in 20 of 20 worlds; steering clearly rose in 17 of 20; a clicked adult lived a median of 73 s (20 worlds, 20 minutes) and 64 s (seeds 1-5, 60 minutes); at most 14% of babies never ate; the population stayed in its band in every world, with no floor arrivals after minute 10; at minute 60 average top speed was 73-108 per world with no bugs at 140 or more. The three Session 2 watch items: seed 4's fast bugs are gone (top speed 76 with 0% at 140+ at minute 60, was 126 with 26%); steering rises in 17 of 20 worlds (was 14), and in 86% of 80 worlds in the faster Node test (was 64%); seed 2's babies that never ate are down to 12% (was 21% at 10 minutes, 17% at 60). The brain-swap check reads 0.83, 0.86 and 1.21 at minutes 1, 10 and 30 (seeds 1-5). Minute 1 now reads about 0.85 in most worlds because the check copies the starting bugs at second 0, while the ghost bugs are refreshed during minute 1 with copies of bugs that have already walked to food (with a mouth, where a bug starts matters more); giving the ghosts the same start fixed it but exposed an opposite bias (real bugs that eat have babies and are hungry again right at the food, ghosts never breed), so the tested version was kept. Changes beyond this plan, all in config.js: eating with the mouth (section 5), 100 starting bugs and sprout growth 38 (section 4), species split at 0.15 (section 6), the gut switch, prey as food, and the pincer, struggle and meat rules (section 5). Also: the top bar counts species and meat-eaters (◆); G opens the Lab panel and V the cinematic camera; a Hall of Fame creature brought back rejoins its own species if it still lives in this world; meteor strikes leave craters and their victims' bodies as meat; the inspector compares genes with the species average and names the hunter when a bug is eaten.
 
 **Session 4 · Polish and launch (2–4 hours)**
 
@@ -784,6 +802,8 @@ Every decision is made, so Session 1 can start as soon as setup is done.
 | Mutation | A small random change to the DNA when a baby is born |
 | Generation | How many parents back a creature's family line goes |
 | Species | A group whose DNA is close enough to count as one kind |
+| Meat-eater | A bug whose diet gene is 0.5 or more: it hunts plant-eaters and eats meat pellets, and has pincers and a spiky shell |
+| Gut switch | A rare mutation (about 1 baby in 200) that flips a baby's diet to the opposite of its parent's: how meat-eaters first appear |
 | Foraging skill | How many times faster a hungry bug finds food than bugs with random brains in the same spots at the same moment; the main "are they learning?" number |
 | Ghost bugs | Invisible bugs that copy real bugs' bodies and places but think with fresh random brains and only pretend to eat; the control group for foraging skill |
 | Steering | How often a walking bug that can see food is pointed at it, compared with what luck alone would give |

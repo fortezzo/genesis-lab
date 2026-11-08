@@ -23,6 +23,10 @@
 //  - Fair proof and speed trade-off: agilitySpeed/agilityExp make long fast legs clumsy, so top
 //    speed is no longer a free upgrade; sproutGrowthFollowsLamps and the wider lamp strength range
 //    give the population real ups and downs.
+//  - Session 3 (meat-eaters and species): a rare gut switch starts meat-eater lines; to a meat-eater,
+//    prey count as food; pincers hold and lock, victims struggle (so hunters catch the weak), and meat
+//    per body is small, like a real food chain. eatWithMouth makes pointing straight at food pay, so
+//    steering evolves in more worlds (startCreatures and sproutGrowthRate rose to keep the start lively).
 var GL = GL || {};
 
 GL.Config = {
@@ -38,6 +42,12 @@ GL.Config = {
   wallEnergyCost: 3.0,       // extra energy per second burned while pressed against the glass wall
   eatOnlyWithRoom: true,     // a bug only eats a sprout it has room for. Nearly full bugs used to graze and waste
                              // most of each sprout, stripping the terrarium; this roughly halved unfed babies
+  eatWithMouth: true,        // bugs eat with their mouths: food must touch the front of the head, not the side or back.
+                             // Session 3: when any part of the body could eat, a third of the worlds evolved bugs that
+                             // spiral in on food with it 40 degrees to one side, which works almost as well; with a
+                             // mouth, pointing straight at food pays, and steering rose in 86% of 80 worlds instead of 64%
+  mouthReach: 1.0,           // the mouth sits at the front of the head, this far ahead of the centre, x body radius...
+  mouthRange: 0.35,          // ...and food within this x body radius (plus the food's own size) of it is in reach
   mmPerUnit: 0.1,            // scale bar: one unit is this many millimetres
   // There are no currents: the air is still, food stays where it grows and creatures only walk.
 
@@ -57,15 +67,17 @@ GL.Config = {
   // --------------------------------------------------------------- sprouts
   sproutMax: 1500,           // most sprouts in the terrarium at once
   sproutStart: 60,           // sprouts when a world begins (a sparse start, so random brains are put to the test)
-  sproutGrowthRate: 32,      // new sprouts per second when the terrarium is bare (at average lamp brightness);
-                             // slows as it fills up. Was 34 before the speed trade-off; slower bugs need less food
+  sproutGrowthRate: 38,      // new sprouts per second when the terrarium is bare (at average lamp brightness);
+                             // slows as it fills up. Was 32: eating with the mouth finds less food by luck, and
+                             // well-fed prey escape hunters, so adults live long enough to follow
   sproutOpenGroundChance: 0.2, // share of new sprouts that come up on open soil instead of under a lamp
   sproutEnergy: 25,          // energy in one sprout
   sproutRadius: 4,           // size of a sprout, for eating
   sproutMaxAge: 120,         // a sprout withers after this many seconds if nobody eats it
 
   // ------------------------------------------------------------ population
-  startCreatures: 90,        // random creatures in a new world (was 60: the start dipped to ~20 bugs in many worlds)
+  startCreatures: 100,       // random creatures in a new world (was 60, then 90: with the mouth, random brains find
+                             // less food by luck, and 100 keeps the start as lively as before)
   populationFloor: 20,       // below this many creatures, new primitive ones wander in
   floorSpawnInterval: 0.25,  // seconds between newcomers while below the floor
   capLaptop: 400,            // most creatures alive at once on a laptop or desktop
@@ -87,7 +99,48 @@ GL.Config = {
     { key: 'mutation', name: 'Mutation rate',   min: 0.02, max: 0.3, startMin: 0.04, startMax: 0.12 }, // chance each DNA number changes
     { key: 'clock',    name: 'Clock speed',     min: 0.1,  max: 2,   startMin: 0.1,  startMax: 2   }  // inner rhythm, cycles per second
   ],
-  meatEating: false,         // plant-eaters only until Session 3, so the diet gene is held at 0
+
+  // ------------------------------------------------------------ meat-eating (Session 3)
+  // Primitive creatures are all plant-eaters: meat-eaters have to evolve by themselves.
+  meatEating: true,          // false = plant-eaters only (the diet gene is held at 0), as in Sessions 1 and 2
+  dietSwitchChance: 0.005,   // a baby is born with the opposite diet from its parent this often (about 1 in 200).
+                             // In-between diets digest both foods poorly, so evolution can't walk from plants to
+                             // meat one small step at a time; this rare gut switch is how a meat-eater line starts
+  eatMinDigest: 0.1,         // a bug ignores food it digests less than this well (meat-eaters don't trample sprouts)
+  preyFoodSense: 1.0,        // to a meat-eater, a living plant-eater counts as food: its food senses show prey this
+                             // strongly (1 = like a meat pellet), so a forager's brain already knows how to chase
+  // Biting. Getting hunting to work took six fixes, each found by tracing why hunts failed:
+  biteReach: 0.95,           // the mouth sits this far ahead of the body's centre, x body radius...
+  biteRange: 0.55,           // ...and reaches this far, x body radius: a creature touching it gets bitten
+  biteDamage: 6,             // health a bite takes per second, x the biter's radius x how well it digests meat (diet squared)
+  biteCost: 0.01,            // energy the biter spends per point of damage it does (was 0.08: biting prey that got
+                             // away was pure loss, so evolution switched biting off before hunting could pay)
+  biteRelease: 0.5,          // pincers close when the bite output goes above 0 and open again only below -this,
+                             // so a brain wavering around 0 doesn't let go of its prey every other tick
+                             // (a bite never hurts the biter's own species)
+  biteLock: 1.0,             // once pincers close on a victim they stay shut this many seconds, whatever the brain
+                             // says: a new meat-eater's bite reflexes are random (its parent ate plants), and without
+                             // the lock it let go the moment its prey was straight ahead
+  biteHoldSize: 1.15,        // pincers hold a victim up to this many times the biter's size: it is dragged along at
+                             // the mouth until it dies or the biter lets go. Bodies don't collide, so without a hold a
+                             // hunter runs straight over its prey and each bite lasts only a moment. In a crowd the
+                             // pincers keep biting the victim they have; a bitten bug can't heal until it gets away
+  preyStruggle: 4.5,         // a held victim struggles: at full energy it breaks free after 1 / this seconds (wounded but
+                             // alive), at half energy after twice as long, so hunters mostly catch the hungry and weak.
+                             // Without it, once kills worked, meat-eaters boomed to 200-300 and wiped out their prey;
+                             // at 2.5 they held the population down hard but clicked adults lived only ~51 s (hour runs)
+  escapeGrace: 1.0,          // after breaking free, nothing can bite it for this many seconds
+  biteGrip: 0.5,             // a bitten victim too big to hold can only walk at this share of its speed
+  biteDrag: 0.5,             // a biter holding prey walks at this share of its speed (it is dragging a body)
+  meatFromEnergy: 0.3,       // a dead bug leaves meat worth this share of its stored energy...
+  meatFromBody: 0.3,         // ...plus this x its size squared for its body, so every death feeds scavengers (that is
+                             // how a new meat-eater line survives its first minutes). Kept small, like a real food
+                             // chain: with whole bodies as meat (1.0 and 0.8), kills fed hunters three times what they
+                             // burned, and they outnumbered their prey
+  meatPelletEnergy: 30,      // meat comes in pellets of at most this much energy...
+  meatMaxPellets: 6,         // ...and at most this many pellets per body
+  meatRadius: 4.5,           // size of a meat pellet, for eating
+  meatMaxAge: 60,            // meat decays after this many seconds
 
   // ----------------------------------------------------------------- brain
   brainInputs: 25,           // senses (see PLAN.md section 5)
@@ -189,8 +242,22 @@ GL.Config = {
     panelLine: 'rgba(140, 200, 255, 0.15)' // panel borders
   },
   plantHueMin: 182,          // plant-eater family colours range from this hue (cyan)...
-  plantHueMax: 212,          // ...to this hue (electric blue), in degrees. Green is kept for the sprouts.
-  hueDrift: 1.5,             // a baby's colour shifts by up to this many degrees from its parent
+  plantHueMax: 216,          // ...to this hue (electric blue), in degrees. Green is kept for the sprouts.
+  meatHueMin: 328,           // meat-eater family colours range from this hue (magenta)...
+  meatHueMax: 392,           // ...through red to this hue (392 = 32, orange)
+  hueDrift: 1.5,             // a bug's own colour sits up to this many degrees from its species' colour
+
+  // ---------------------------------------------------------------- species
+  species: {
+    splitDistance: 0.15,     // a baby more than this far from its species' founder (genetic distance, 0-1) starts a
+                             // new species. Distance = average gene difference + average brain difference, each
+                             // scaled to its range. A baby with the other diet (plants vs meat) always starts one
+    hueStep: 9,              // a new species' colour moves up to this many degrees from its parent species' colour
+    genusKeep: 0.6,          // a new species keeps its parent's genus (first name) this often, if the diet matches
+    logMinMembers: 5,        // a new species is announced in the lab log once this many of it are alive at once
+    historyEvery: 4,         // species populations are recorded every this many stats samples (every 2 s)
+    meatDiet: 0.5            // a bug with a diet gene at or above this is a meat-eater
+  },
 
   // ---------------------------------------------------------------- drawing
   render: {
@@ -235,6 +302,16 @@ GL.Config = {
     sproutGrowTime: 2.5,     // seconds for a new sprout to grow to full size
     sproutSwaySpeed: 1.1,    // how fast sprouts sway (radians per real second)
     sproutSwayAmount: 0.07,  // how much they sway (share of their size)
+
+    // Meat pellets: chunky amber nuggets with a dark outline and a hot core, so they stay easy to see in
+    // a lamp's warm light (amber on orange light would otherwise melt away).
+    meatSize: 2.6,           // pellet drawing size, x meat radius
+    meatGlow: 2.2,           // pellet glow size, x meat radius (kept small: a big amber glow blends into lamp light)
+    meatGlowAlpha: 0.22,     // pellet glow brightness
+    meatDotPx: 3.2,          // from far away a pellet is an amber dot with a dark ring, this many pixels wide
+    meatFadeTime: 8,         // a pellet fades over its last this many seconds before it decays
+    biteSparkRate: 16,       // red sparks per second at a hunter's mouth while it holds prey
+    craterSeconds: 40,       // a meteor's scorch mark fades out over this many real seconds
 
     // The terrarium: soil, moss, glass and grid.
     soilTexturePx: 1280,     // the soil and moss are painted once into a texture this many pixels across
@@ -295,6 +372,27 @@ GL.Config = {
     liteGlassBelowLevel: 1   // at a drawing quality below this (0 = low), panels drop their blur to save frame rate
   },
 
+  // ------------------------------------------------------------- god mode (Session 3)
+  god: {
+    droughtSeconds: 60,      // Drought: sprouts barely grow for this long...
+    droughtGrowth: 0.1,      // ...at this share of the usual rate...
+    droughtWither: 0.5,      // ...and this share of the sprouts standing wither at once
+    bloomSprouts: 500,       // Sprout bloom: this many sprouts burst up under the lamps...
+    bloomSeconds: 30,        // ...then sprouts grow faster for this long...
+    bloomGrowth: 2.5,        // ...at this many times the usual rate
+    iceSeconds: 90,          // Ice age: the terrarium cools for this long
+    iceRamp: 6,              // ...easing in and out over this many seconds
+    iceGrowth: 0.3,          // sprouts grow at this share of the usual rate
+    iceSpeed: 0.65,          // legs move at this share of their speed
+    iceUpkeep: 1.35,         // staying alive costs this many times more
+    meteorRadius: 170,       // Meteor strike: everything within this many units of the impact is lost
+    meteorDelay: 1.2,        // the meteor falls for this many simulated seconds before it strikes
+    dropCount: 6,            // Predator drop: this many meat-eaters arrive...
+    dropSpread: 70,          // ...scattered within this many units of where you click
+    paintRate: 45,           // Paint food: sprouts per real second under the brush...
+    paintRadius: 60          // ...within this many units of the pointer
+  },
+
   // ------------------------------------------------------------- champion
   championBabyWeight: 3,     // champion score = babies x this + minutes alive (PLAN.md section 6)
   championMinuteWeight: 1,
@@ -308,6 +406,7 @@ GL.Config = {
     recordMinAge: 180,       // a lifespan record is only news once a bug lived at least this many seconds...
     recordAgeStep: 10,       // ...and beat the old record by at least this many seconds (lives end by 5:00)
     recordMinBabies: 5,      // a babies record is news once a bug had at least this many babies
+    recordMinKills: 6,       // a hunting record is news once a meat-eater made at least this many kills
     recordGap: 45,           // at most one record line per this many simulated seconds (better ones wait their turn)
     generationMilestones: [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000], // generations worth a log line
     skillMilestones: [1.5, 2, 3, 4, 5, 6, 8, 10],   // foraging skill levels (x random brains) worth a log line
@@ -328,6 +427,10 @@ GL.Config = {
     toastSeconds: 6,         // a new lab log line shows briefly near the bottom when the drawer is closed
     hintSeconds: 14,         // the first-time hint fades after this many seconds
     brainTipSeconds: 40,     // if nobody has clicked a bug after this many seconds, a one-time tip suggests it
+    treeRefresh: 1,          // seconds between family tree redraws while it is open
+    cinemaShotSec: 8,        // the cinematic camera holds each shot for about this many real seconds...
+    cinemaEase: 1.1,         // ...glides between shots this gently (the usual follow uses cameraEase)...
+    cinemaCaptionSec: 4.5,   // ...and shows each shot's caption for this long
 
     // Brain viewer (the showpiece).
     brainSmoothing: 14,      // how quickly the drawn neuron activity follows the real activity (per second),
@@ -350,6 +453,8 @@ GL.Config = {
     chartBirths: '#2EA862',  // births per minute (a line)
     chartDeaths: { starvation: '#C47F0E', oldAge: '#9474E6', eaten: '#DE5089', disaster: '#169DB3' }, // deaths (stacked)
     chartSteer: '#169DB3',   // steering
+    chartPrey: '#169DB3',    // hunters and hunted: plant-eaters...
+    chartPred: '#DE5089',    // ...and meat-eaters
     chartGrid: 'rgba(140, 200, 255, 0.08)', // faint chart grid lines
     chartAxis: '#8FA6C4'     // axis labels
   }

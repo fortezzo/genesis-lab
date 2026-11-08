@@ -20,6 +20,9 @@
       <div class="stat" title="Creatures alive right now">
         <span class="label">Population</span><span class="value" id="stat-pop">0</span>
       </div>
+      <div class="stat" title="Species alive right now. A family line that drifts far enough from its founder's DNA becomes a new species; a baby born with the other diet always does.">
+        <span class="label">Species</span><span class="value"><span id="stat-species">1</span><small id="stat-meat" class="meat-count" title="Meat-eaters alive right now"></small></span>
+      </div>
       <div class="stat skill" title="How many times faster a hungry bug here finds food than a bug with a random brain would, in the same spot at the same moment (over the last simulated minute). The random brains are invisible ghost bugs that copy real bugs' bodies and places but think with fresh random brains, and only pretend to eat.">
         <span class="label">Foraging skill</span>
         <span class="value"><span id="stat-skill">0.0</span><small>&times; random brains</small></span>
@@ -28,6 +31,12 @@
       </div>
     </div>
     <div class="tools" role="group" aria-label="Panels">
+      <button id="btn-lab" class="tool" aria-expanded="false" title="God mode and the Hall of Fame: change the world, or bring back saved creatures. Key G">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.6 3.6 3.9.4-2.9 2.6.8 3.9L8 10l-3.4 2 .8-3.9L2.5 5.5l3.9-.4z"/></svg><span>Lab</span><kbd>G</kbd>
+      </button>
+      <button id="btn-cinema" class="tool" aria-pressed="false" title="Cinematic camera: cruises between hunts, births and crowds by itself. Key V">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5h9v7h-9zM10.5 7l4-2.5v7l-4-2.5z"/></svg><span>Cinematic</span><kbd>V</kbd>
+      </button>
       <button id="btn-champion" class="tool" title="Fly to the champion: the living bug with the best score (babies x 3 + minutes alive). Key F">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 12.5h12l1-8-4 3-3-5-3 5-4-3z"/></svg><span>Champion</span><kbd>F</kbd>
       </button>
@@ -47,6 +56,9 @@
         <div id="insp-meta" class="insp-meta"></div>
       </div>
       <span id="insp-champ" class="badge champ hidden" title="The champion: the best score alive (babies x 3 + minutes alive)">Champion</span>
+      <button id="insp-save" class="icon-btn save-btn" aria-label="Save to the Hall of Fame" title="Save to the Hall of Fame (up to 20 creatures), to bring it back later or share it as a code">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.8 3.9 4.2.4-3.2 2.8 1 4.1L8 10.8l-3.8 2.2 1-4.1L2 6.1l4.2-.4z"/></svg>
+      </button>
       <button id="insp-close" class="icon-btn" aria-label="Close (Esc)" title="Stop following (Esc)">&times;</button>
     </div>
     <div id="insp-death" class="insp-death hidden"></div>
@@ -55,10 +67,10 @@
         <div class="vital" title="Energy: walking, seeing and thinking burn it; eating pays it back. At zero the bug starves.">
           <span class="label">Energy</span><div class="bar"><div id="insp-energy" class="fill energy-fill"></div></div><span id="insp-energy-v" class="num">0%</span>
         </div>
-        <div class="vital" title="Health: bites lower it (from Session 3) and it slowly regrows by spending energy.">
+        <div class="vital" title="Health: a meat-eater's bite lowers it, and it slowly regrows by spending energy. At zero the bug is eaten.">
           <span class="label">Health</span><div class="bar"><div id="insp-health" class="fill health-fill"></div></div><span id="insp-health-v" class="num">0%</span>
         </div>
-        <div class="vital" title="Diet: 0 eats only plants, 1 only meat. In-between diets digest both poorly. Meat-eating arrives in Session 3.">
+        <div class="vital" title="Diet: 0 eats only plants, 1 only meat. In-between diets digest both poorly, so a meat-eater line starts with a rare gut switch at birth.">
           <span class="label">Diet</span><div class="bar diet"><div id="insp-diet" class="diet-mark"></div></div><span id="insp-diet-v" class="num">plants</span>
         </div>
       </div>
@@ -76,13 +88,13 @@
 
       <section class="insp-sec">
         <div class="sec-head"><span class="label">What it sees</span>
-          <span class="brain-legend" title="Its 5 view slices light up green as it sees food"><span><i class="dot food"></i>food</span><span><i class="dot bug"></i>bugs</span><span><i class="dot wall"></i>glass wall</span><span id="radar-note" class="dim"></span></span>
+          <span class="brain-legend" title="Its 5 view slices light up as it sees food"><span><i id="radar-food-dot" class="dot food"></i><span id="radar-food-label">food</span></span><span><i class="dot bug"></i>bugs</span><span><i class="dot wall"></i>glass wall</span><span id="radar-note" class="dim"></span></span>
         </div>
         <canvas id="radar" aria-label="Radar of the creature's 5 view slices"></canvas>
       </section>
 
       <section class="insp-sec" id="insp-genes-sec">
-        <div class="sec-head"><span class="label">Genes</span><span class="sec-note"><i class="avg-tick"></i>average of all living bugs</span></div>
+        <div class="sec-head"><span class="label">Genes</span><span class="sec-note"><i class="avg-tick"></i><span id="insp-avg-note">average of its species</span></span></div>
         <div id="insp-genes" class="genes"></div>
       </section>
 
@@ -100,14 +112,21 @@
   </aside>
 
   <!-- Bottom drawer: charts and the lab log. -->
-  <section id="drawer" class="panel hidden" aria-label="Charts and lab log">
+  <section id="drawer" class="panel hidden" aria-label="Charts, family tree and lab log">
     <div class="drawer-head">
-      <span class="label">Charts</span>
-      <span class="drawer-note">every chart covers the whole run so far &middot; hover for values</span>
+      <div class="tabs" role="tablist">
+        <button id="tab-charts" class="tab active" role="tab" aria-selected="true">Charts</button>
+        <button id="tab-tree" class="tab" role="tab" aria-selected="false">Family tree</button>
+      </div>
+      <span id="drawer-note" class="drawer-note">every chart covers the whole run so far &middot; hover for values</span>
       <button id="drawer-close" class="icon-btn" aria-label="Close charts (C)" title="Close (C)">&times;</button>
     </div>
     <div class="drawer-body">
       <div id="charts" class="charts"></div>
+      <div id="tree" class="tree hidden">
+        <canvas id="tree-canvas" aria-label="Family tree of species: each branch is a species, as thick as its population"></canvas>
+        <div id="tree-tip" class="tip hidden"></div>
+      </div>
       <div class="log-col">
         <div class="log-head"><span class="label">Lab log</span><span id="log-count" class="sec-note"></span></div>
         <ol id="log" class="log" aria-live="polite"></ol>
@@ -115,6 +134,32 @@
     </div>
   </section>
 
+  <!-- Left panel: god mode and the Hall of Fame. -->
+  <aside id="lab" class="panel hidden" aria-label="God mode and Hall of Fame">
+    <div class="lab-head">
+      <div class="tabs" role="tablist">
+        <button id="tab-god" class="tab active" role="tab" aria-selected="true">God mode</button>
+        <button id="tab-hof" class="tab" role="tab" aria-selected="false">Hall of Fame <span id="hof-count" class="tab-count"></span></button>
+      </div>
+      <button id="lab-close" class="icon-btn" aria-label="Close (G)" title="Close (G)">&times;</button>
+    </div>
+    <div id="god" class="lab-body">
+      <p class="lab-intro">Change the world and watch how evolution copes. Every change is noted in the lab log.</p>
+      <div id="god-tools" class="god-tools"></div>
+      <div id="god-status" class="god-status"></div>
+    </div>
+    <div id="hof" class="lab-body hidden">
+      <p class="lab-intro">Your saved creatures. Release one into this terrarium, or copy its code to share it; paste a friend's code below.</p>
+      <ol id="hof-list" class="hof-list"></ol>
+      <div class="hof-import">
+        <input id="hof-code" type="text" spellcheck="false" autocomplete="off" placeholder="Paste a creature code (GL1...)" aria-label="Creature code">
+        <button id="hof-add" class="chip-btn primary">Add</button>
+      </div>
+      <div id="hof-msg" class="hof-msg"></div>
+    </div>
+  </aside>
+
+  <div id="caption" class="caption hidden" aria-live="polite"></div>
   <div id="toast" class="panel toast hidden" aria-live="polite"></div>
   <div id="flash"></div>
 
@@ -133,7 +178,7 @@
   </div>
 
   <div id="scalebar" aria-hidden="true"><div id="scale-line"></div><span id="scale-label">10 mm</span></div>
-  <div id="hint">Drag to move &middot; Scroll to zoom &middot; Click a creature to see its brain &middot; C for charts &middot; Space to pause</div>
+  <div id="hint">Drag to move &middot; Scroll to zoom &middot; Click a creature to see its brain &middot; C for charts &middot; G for god mode &middot; V for cinematic</div>
   <pre id="debug" class="hidden"></pre>
 
   <!-- Classic scripts in order, all under one global namespace: GL. -->
@@ -146,6 +191,8 @@
   <script src="js/sim/genome.js"></script>
   <script src="js/sim/brain.js"></script>
   <script src="js/sim/events.js"></script>
+  <script src="js/sim/names.js"></script>
+  <script src="js/sim/species.js"></script>
   <script src="js/sim/story.js"></script>
   <script src="js/sim/stats.js"></script>
   <script src="js/sim/food.js"></script>
@@ -160,7 +207,11 @@
   <script src="js/ui/brainView.js"></script>
   <script src="js/ui/inspector.js"></script>
   <script src="js/ui/charts.js"></script>
+  <script src="js/ui/familyTree.js"></script>
   <script src="js/ui/labLog.js"></script>
+  <script src="js/ui/godMode.js"></script>
+  <script src="js/ui/hallOfFame.js"></script>
+  <script src="js/ui/cinematic.js"></script>
   <script src="js/ui/controls.js"></script>
   <script src="js/main.js"></script>
 </body>

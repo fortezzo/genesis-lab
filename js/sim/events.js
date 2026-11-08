@@ -20,9 +20,12 @@ GL.Events = function (capacity) {
 };
 
 GL.Events.BIRTH = 1;     // a baby was born
-GL.Events.DEATH = 2;     // a creature died
-GL.Events.EAT = 3;       // a creature ate a piece of food
-GL.Events.ARRIVAL = 4;   // a primitive creature wandered in (population floor)
+GL.Events.DEATH = 2;     // a creature died (starved, old age or disaster)
+GL.Events.EAT = 3;       // a creature ate a sprout
+GL.Events.ARRIVAL = 4;   // a creature arrived: wandered in (population floor) or placed by the experimenter
+GL.Events.KILL = 5;      // a creature was killed and eaten by a meat-eater
+GL.Events.EAT_MEAT = 6;  // a creature ate a meat pellet
+GL.Events.METEOR = 7;    // a meteor struck (r = blast radius)
 
 GL.Events.prototype = {
   push: function (type, x, y, hue, r, id) {
@@ -31,10 +34,11 @@ GL.Events.prototype = {
     this.hue[i] = hue; this.r[i] = r; this.id[i] = id;
     this.seq++;
   },
-  // kind: 'info', 'boom', 'crash', 'record', 'gen', 'skill' or 'warn'; id: a specimen the line is about (0 = none).
-  note: function (time, text, kind, id, gen) {
+  // kind: 'info', 'boom', 'crash', 'record', 'gen', 'skill', 'warn', 'species', 'meat', 'extinct' or 'god';
+  // id: a specimen the line is about (0 = none). Species lines also carry .species (its id).
+  note: function (time, text, kind, id, gen, speciesId) {
     this.logCount++;
-    this.log.push({ time: time, text: text, kind: kind || 'info', id: id || 0, gen: gen || 0, n: this.logCount });
+    this.log.push({ time: time, text: text, kind: kind || 'info', id: id || 0, gen: gen || 0, n: this.logCount, species: speciesId || 0 });
     if (this.log.length > this.logMax) this.log.splice(0, this.log.length - this.logMax);
   }
 };

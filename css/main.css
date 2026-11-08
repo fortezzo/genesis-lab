@@ -240,7 +240,7 @@ body.lite .panel { -webkit-backdrop-filter: none; backdrop-filter: none; backgro
 
 /* Screenshot mode (H): every panel fades away. */
 body.clean #topbar, body.clean #inspector, body.clean #drawer, body.clean #selection,
-body.clean #scalebar, body.clean #hint, body.clean #toast { opacity: 0 !important; pointer-events: none; }
+body.clean #scalebar, body.clean #hint, body.clean #toast, body.clean #lab, body.clean #caption { opacity: 0 !important; pointer-events: none; }
 
 kbd {
   font-family: var(--font-num); font-size: 9.5px; line-height: 1;
@@ -353,6 +353,7 @@ kbd {
 .lg.pulse { width: 6px; height: 6px; border-radius: 50%; vertical-align: 1px; background: #fff; box-shadow: 0 0 6px var(--cyan); }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
 .dot.food { background: #66DD4F; box-shadow: 0 0 5px #66DD4F; }
+.dot.prey { background: #FF6070; box-shadow: 0 0 5px #FF6070; }
 .dot.bug { background: #4A9DFF; box-shadow: 0 0 5px #4A9DFF; }
 .dot.wall { background: var(--amber); box-shadow: 0 0 5px var(--amber); }
 .tip {
@@ -507,4 +508,131 @@ body.ready > #flash.on { opacity: 0.3; transition: none; }
   .log-col { width: auto; flex: 0 0 34%; }
   .chart.wide { grid-column: auto; }
   .tools kbd { display: none; }
+}
+
+/* ============================================================ Session 3 */
+
+/* Species count in the top bar, with the meat-eaters beside it. */
+.meat-count { color: #FF7A9C !important; white-space: nowrap; margin-left: 7px !important; }
+
+/* Tabs (drawer and lab panel). */
+.tabs { display: flex; gap: 4px; }
+.tab {
+  font: 600 10px var(--font-text); letter-spacing: 0.16em; text-transform: uppercase;
+  height: 24px; padding: 0 10px; border-radius: 7px; cursor: pointer;
+  color: var(--text-dim); background: transparent; border: 1px solid transparent;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--cyan); background: rgba(34, 229, 255, 0.10); border-color: rgba(34, 229, 255, 0.35); }
+.tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.tab-count { font: 10px var(--font-num); letter-spacing: 0; color: var(--text); margin-left: 3px; }
+
+/* Family tree tab in the drawer. */
+.tree { position: relative; flex: 1; min-width: 0; }
+.tree canvas { display: block; width: 100%; height: 100%; }
+.tree.hidden, .charts.hidden { display: none; }
+.tree .tip { white-space: normal; max-width: 280px; font-size: 11px; }
+
+/* ------------------------------------------------------------- the Lab panel (left) */
+#lab {
+  position: fixed;
+  top: calc(var(--top-h) + 8px); left: 12px; bottom: 12px;
+  width: 300px;
+  display: flex; flex-direction: column; overflow: hidden;
+  transition: transform 0.22s cubic-bezier(.2,.8,.2,1), opacity 0.22s;
+}
+#lab.hidden { transform: translateX(-24px); opacity: 0; pointer-events: none; }
+body.drawer-open #lab { bottom: calc(var(--drawer-h) + 24px); }
+body.lab-open .toast, body.lab-open #scalebar { left: 334px; }
+.lab-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px 8px 12px; border-bottom: 1px solid var(--line); }
+.lab-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; scrollbar-width: thin; scrollbar-color: rgba(140,200,255,0.2) transparent; }
+.lab-body.hidden { display: none; }
+.lab-intro { margin: 0 0 10px; font-size: 11.5px; line-height: 1.4; color: var(--text-dim); }
+
+.god-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.god-tool {
+  display: grid; grid-template-columns: 18px 1fr; grid-template-areas: "i n" "d d"; align-items: center; gap: 3px 7px;
+  text-align: left; padding: 8px 9px; border-radius: 9px; cursor: pointer;
+  color: var(--text); background: rgba(140, 200, 255, 0.04); border: 1px solid var(--line);
+  transition: background 0.2s, border-color 0.2s;
+}
+.god-tool:hover { border-color: rgba(34, 229, 255, 0.4); background: rgba(34, 229, 255, 0.06); }
+.god-tool:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.god-tool svg { grid-area: i; width: 16px; height: 16px; fill: currentColor; color: var(--amber); }
+.god-tool[data-tool="bloom"] svg, .god-tool[data-tool="paint"] svg { color: #66DD4F; }
+.god-tool[data-tool="ice"] svg { color: #9FD7FF; }
+.god-tool[data-tool="drop"] svg { color: var(--magenta); }
+.god-tool[data-tool="meteor"] svg { color: #FF8A4C; }
+.gt-name { grid-area: n; font: 600 12px var(--font-head); letter-spacing: 0.02em; }
+.gt-desc { grid-area: d; font-size: 10.5px; line-height: 1.3; color: var(--text-dim); }
+.god-tool.armed { border-color: rgba(255, 176, 32, 0.7); background: rgba(255, 176, 32, 0.12); box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.25) inset; }
+.god-status { margin-top: 12px; display: grid; gap: 6px; }
+.gs-row { display: grid; grid-template-columns: 92px 1fr 34px; align-items: center; gap: 8px; font-size: 11.5px; }
+.gs-row.idle, .gs-row.hot { display: block; color: var(--text-dim); }
+.gs-row.hot { color: #FF9A66; }
+.gs-bar { position: relative; height: 5px; border-radius: 3px; background: rgba(140, 200, 255, 0.10); overflow: hidden; }
+.gs-bar i { position: absolute; inset: 0; transform-origin: left; border-radius: 3px; background: var(--amber); transition: transform 0.25s; }
+.gs-row.ice .gs-bar i { background: #9FD7FF; }
+.gs-row.bloom .gs-bar i { background: #66DD4F; }
+body.tool-armed #terrarium { cursor: crosshair; }
+
+/* Hall of Fame */
+.hof-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hof-list li {
+  display: grid; grid-template-columns: 14px 1fr; grid-template-areas: "s t" "b b"; gap: 6px 9px; align-items: center;
+  padding: 8px 9px; border-radius: 9px; background: rgba(140, 200, 255, 0.04); border: 1px solid rgba(140, 200, 255, 0.08);
+}
+.hof-list li .swatch { grid-area: s; width: 12px; height: 12px; }
+.hof-list li .swatch.meat { border-radius: 3px; transform: rotate(45deg); }
+.hof-text { grid-area: t; min-width: 0; }
+.hof-name { font: 600 12.5px var(--font-head); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hof-name i { font-weight: 600; }
+.hof-meta { font: 10.5px var(--font-num); color: var(--text-dim); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hof-btns { grid-area: b; display: flex; gap: 6px; align-items: center; }
+.hof-btns .chip-btn { height: 24px; padding: 0 9px; font-size: 11px; }
+.hof-btns .icon-btn { width: 24px; height: 24px; flex: 0 0 24px; font-size: 15px; margin-left: auto; }
+.hof-list li.hof-empty { display: block; color: var(--text-dim); font-size: 11.5px; padding: 8px 2px; background: none; border: none; }
+.hof-import { display: flex; gap: 6px; margin-top: 12px; }
+.hof-import input {
+  flex: 1; min-width: 0; height: 28px; padding: 0 9px; border-radius: 8px;
+  font: 11px var(--font-num); color: var(--text); background: rgba(5, 11, 24, 0.6); border: 1px solid var(--line);
+  user-select: text; -webkit-user-select: text;
+}
+.hof-import input:focus { outline: none; border-color: rgba(34, 229, 255, 0.5); }
+.hof-msg { margin-top: 8px; min-height: 15px; font-size: 11px; line-height: 1.35; color: var(--text-dim); }
+.hof-msg.bad { color: #FF9AB0; }
+
+/* Inspector: species name, meat-eaters, and the Hall of Fame star. */
+.insp-name i { font-style: italic; font-weight: 600; }
+.insp-name .num-id { font-family: var(--font-num); font-size: 13px; color: var(--text-dim); font-weight: 400; margin-left: 2px; }
+#inspector.meat .swatch { border-radius: 3px; transform: rotate(45deg) scale(0.85); }
+.save-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; vertical-align: -2px; }
+.save-btn:hover { color: #FFD27A; border-color: rgba(255, 210, 122, 0.5); }
+.save-btn.saved { color: #FFD27A; border-color: rgba(255, 210, 122, 0.5); }
+.save-btn.saved svg { fill: #FFD27A; }
+.save-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Cinematic camera: a caption for each shot. */
+.caption {
+  position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 40px)); padding: 8px 16px; border-radius: 999px;
+  font-size: 13px; line-height: 1.35; text-align: center; color: var(--text);
+  background: rgba(5, 11, 24, 0.66); border: 1px solid rgba(140, 200, 255, 0.14);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); pointer-events: none;
+  transition: opacity 0.6s, transform 0.6s;
+}
+.caption b { font-family: var(--font-head); font-weight: 600; color: var(--cyan); margin-right: 3px; }
+.caption.hidden { opacity: 0 !important; transform: translate(-50%, 6px); }
+body.clean .caption { bottom: 26px; }
+body.drawer-open .caption { display: none; }
+
+/* Lab log: new kinds of lines. */
+.k-species { --kind: #4A9DFF; } .k-meat { --kind: var(--magenta); } .k-extinct { --kind: rgba(140, 155, 180, 0.5); } .k-god { --kind: var(--amber); }
+.log li.k-extinct { color: var(--text-dim); }
+
+@media (max-width: 760px) {
+  #lab { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 58vh; }
+  #lab.hidden { transform: translateY(24px); }
+  body.drawer-open #lab { bottom: 8px; }
 }
