@@ -40,8 +40,7 @@ GL.Prefs = (function () {
 // ------------------------------------------------------------------ world settings
 // The numbers each world setting scales, as config.js has them (captured once, before any change).
 GL.WorldSettings = (function () {
-  var C = GL.Config, base = { sproutGrowthRate: C.sproutGrowthRate, geneNudge: C.geneNudge, brainNudge: C.brainNudge,
-                              terrariumRadius: C.terrariumRadius };
+  var C = GL.Config, base = GL.WorldRules.base;
   var S = C.settings;
   function clampTo(v, r) { v = Number(v); if (!isFinite(v)) v = r[0]; return Math.min(r[1], Math.max(r[0], Math.round(v / r[2]) * r[2])); }
   return {
@@ -56,13 +55,8 @@ GL.WorldSettings = (function () {
         size: S.worldSizes[ws.size] ? ws.size : 'normal'
       };
     },
-    // Set config.js numbers for a new world. The defaults leave every number exactly as it was.
-    apply: function (ws) {
-      C.sproutGrowthRate = ws.growth === 1 ? base.sproutGrowthRate : base.sproutGrowthRate * ws.growth;
-      C.geneNudge = ws.mutation === 1 ? base.geneNudge : base.geneNudge * ws.mutation;
-      C.brainNudge = ws.mutation === 1 ? base.brainNudge : base.brainNudge * ws.mutation;
-      C.terrariumRadius = ws.size === 'normal' ? base.terrariumRadius : (S.worldSizes[ws.size] || base.terrariumRadius);
-    },
+    // Set config.js numbers for a new world (js/sim/rules.js). The defaults leave every number exactly as it was.
+    apply: function (ws) { return GL.WorldRules.apply(ws); },
     isDefault: function (ws, defaultCap) { return ws.cap === defaultCap && ws.growth === 1 && ws.mutation === 1 && ws.size === 'normal'; },
     describe: function (ws, defaultCap) {
       var parts = [];
@@ -88,7 +82,7 @@ GL.WorldForm = function (box, values, defaultCap, onChange) {
   box.innerHTML =
     '<label class="set-row" title="The same seed and settings always give the same starting world. Leave it empty for a random one.">' +
       '<span class="set-name">Seed</span><input type="text" inputmode="numeric" data-k="seed" placeholder="random" spellcheck="false" autocomplete="off" maxlength="10"></label>' +
-    range('cap', 'Creature cap', S.capRange, '', 'Most creatures alive at once. More means a busier terrarium (and more work for this device).') +
+    range('cap', 'Creature cap', S.capRange, '', 'Most creatures alive at once. More means a busier terrarium (and more work for this device). Below 400 the terrarium shrinks and sprouts grow in proportion, so there are as many bugs per area and as much food per bug, and gut switches are more likely, so predators still evolve (phones use 200).') +
     range('growth', 'Sprout growth', S.growthRange, '×', 'How fast sprouts grow, compared with the usual rate. More food means longer lives; less means harder times.') +
     range('mutation', 'Mutation strength', S.mutationRange, '×', 'How big each random DNA change is when a baby is born. Stronger means faster but clumsier evolution.') +
     '<div class="set-row" title="How big the terrarium is. The heat lamps and their feeding grounds stay the same size."><span class="set-name">World size</span>' +

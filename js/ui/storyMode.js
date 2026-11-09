@@ -183,7 +183,9 @@ GL.StoryMode = (function () {
         var ch = w.findById(w.stats.championId);
         if (ch && ch.babies >= 3) { this.enter('moment', { key: 'champion', data: { id: ch.id } }); return; }
       }
-      if (core || mins >= SM.maxSimMin || this.t >= SM.maxRealSec) { this.enter('end'); return; }
+      // Everything happened early: keep watching (a crash or a record may still come) until the story has
+      // run about minRealSec, so even a fast world gets a 3-minute story.
+      if ((core && this.t >= SM.minRealSec - SM.endSec) || mins >= SM.maxSimMin || this.t >= SM.maxRealSec) { this.enter('end'); return; }
       if (this.t > SM.lateAfterSec) this.setSpeed(SM.gapSpeedLate);
       var label = '▶▶ ' + this.app.loop.speed + '× · ' + clock(w.time) + ' · fast-forwarding to the next moment';
       if (label !== this._ff) { this._ff = label; this.el.ff.textContent = label; }
@@ -223,7 +225,7 @@ GL.StoryMode = (function () {
         this.moment.dur = SM.huntMaxSec;
         if (c) this.follow(c, 2.4); else this.wide(1.6);
         this.caption(kicker, 'Hunters.',
-          '<i>' + esc(sp ? sp.name : 'A meat-eater species') + '</i> has grown to ' + plural(sp ? sp.count : SM.hunterMembers, 'meat-eater', 'meat-eaters') +
+          '<i>' + esc(sp ? sp.name : 'A meat-eater species') + '</i> has grown to ' + plural(sp ? Math.max(sp.peak, SM.hunterMembers) : SM.hunterMembers, 'meat-eater', 'meat-eaters') +
           ', and they hunt the plant-eaters. Watch the pincers.');
       } else if (e.key === 'species') {
         sp = w.species.get(d.speciesId);

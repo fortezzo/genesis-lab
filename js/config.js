@@ -81,7 +81,8 @@ GL.Config = {
   populationFloor: 20,       // below this many creatures, new primitive ones wander in
   floorSpawnInterval: 0.25,  // seconds between newcomers while below the floor
   capLaptop: 400,            // most creatures alive at once on a laptop or desktop
-  capPhone: 150,             // most creatures alive at once on a phone
+  capPhone: 200,             // most creatures alive at once on a phone (a scaled-down world: see smallWorld below;
+                             // was 150 until the post-launch phone predator fix)
   capBestFed: true,          // when the terrarium is full, each free place goes to the best-fed creature that
                              // wants a baby, so good foragers still win once the population stops growing
 
@@ -459,6 +460,19 @@ GL.Config = {
     chartAxis: '#8FA6C4'     // axis labels
   },
 
+  // ------------------------------------------------------------- smaller populations (phones; js/sim/rules.js)
+  // A world with a cap below scaleRefCap is a scaled-down laptop world: radius x sqrt(cap / scaleRefCap),
+  // sprout growth and sproutMax x (cap / scaleRefCap), and the gut switch x (scaleRefCap / cap)^dietSwitchExp.
+  // At the phone cap of 200 that is a 1,414-unit terrarium, 19 sprouts per second, 750 sprouts at most and a
+  // gut switch about 1 baby in 60. Phone worlds then get predators: a hunter species by minute 20 in 50 of 60
+  // worlds instead of 7 (the old phone world: cap 150 in a full-size terrarium), with steering, lifespans and
+  // the learning proof as on a laptop, and a frame costs less than before (a smaller floor, fewer sprouts).
+  smallWorld: {
+    scaleRefCap: 400,          // the full-size world (the laptop cap); caps at or above it change nothing
+    dietSwitchExp: 1.75,       // how much more likely the gut switch is in a smaller world
+    dietSwitchMax: 0.05        // ...but never more than 1 baby in 20
+  },
+
   // ------------------------------------------------------------- settings panel (Session 4)
   // World settings take effect when a new world starts (New world, or Begin after changing them in
   // Advanced). Each is [smallest, largest, step]; the defaults are the numbers above.
@@ -493,7 +507,8 @@ GL.Config = {
     huntMaxSec: 16,          // the hunters chapter waits up to this long for a kill
     openSec: 6,              // the opening shot of the whole terrarium, before flying in on one bug
     endSec: 11,              // the closing card stays this long (any click ends it sooner)
-    minRealSec: 190,         // if every chapter has happened sooner than this, the champion gets a chapter too
+    minRealSec: 190,         // if every chapter has happened sooner than this, the champion gets a chapter too, and the
+                             // story keeps watching (fast-forwarding) so it still lasts about this long
     maxRealSec: 300,         // the story ends by this many real seconds whatever happens...
     maxSimMin: 20,           // ...or once this many simulated minutes have passed (predators had their chance)
     skillMin: 2,             // "learning to find food": foraging skill at least this...

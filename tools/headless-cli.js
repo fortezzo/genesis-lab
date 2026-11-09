@@ -5,6 +5,7 @@
 //   --seeds 1,2,3       which worlds to run (default 1,2,3)
 //   --minutes 10        simulated minutes per world (default 10)
 //   --set name=value    try a different config.js number without editing the file (repeatable)
+//   --cap 150           a smaller world, as on a phone (default: the laptop cap)
 //   --summary           print only the summary table
 //   --json              print the raw results as JSON
 'use strict';
@@ -19,7 +20,7 @@ var args = parseArgs(process.argv.slice(2));
 if (args.one !== undefined) {
   // Child mode: run one seed and print its result as JSON.
   var GL1 = load(args.sets);
-  var run = new GL1.Headless.SeedRun(args.one, args.minutes);
+  var run = new GL1.Headless.SeedRun(args.one, args.minutes, args.cap);
   while (!run.advance(60 * 60)) { /* keep going */ }
   process.stdout.write(JSON.stringify(run.result()));
   process.exit(0);
@@ -30,6 +31,7 @@ var GL = load(args.sets);
 var pending = args.seeds.length, results = new Array(args.seeds.length), started = Date.now();
 args.seeds.forEach(function (seed, i) {
   var childArgs = [__filename, '--one', String(seed), '--minutes', String(args.minutes)];
+  if (args.cap) childArgs.push('--cap', String(args.cap));
   args.sets.forEach(function (s) { childArgs.push('--set', s); });
   var child = childProcess.spawn(process.execPath, childArgs, { stdio: ['ignore', 'pipe', 'inherit'] });
   var out = '';
@@ -84,6 +86,7 @@ function parseArgs(argv) {
     else if (k === '--summary') a.summary = true;
     else if (k === '--json') a.json = true;
     else if (k === '--one') a.one = Number(argv[++i]);
+    else if (k === '--cap') a.cap = Number(argv[++i]);
   }
   return a;
 }

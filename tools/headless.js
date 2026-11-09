@@ -8,20 +8,28 @@ GL.Headless = (function () {
   var CLICK_EVERY = 10;        // seconds between pretend "viewer clicks a random adult" samples...
   var CLICK_FROM = 180;        // ...starting at minute 3
   var HORIZON = 120;           // only judge clicks and babies at least this long before the run ends
-  var BOOM_POP = 150;          // the population "booms" when it first reaches this many bugs
+  var BOOM_POP = 150;          // the population "booms" when it first reaches this many bugs (in a full-size world;
+                               // smaller worlds scale it with their cap, like PREY_SURVIVE below)
   var SWAP_MINUTES = [1, 10, 30, 60]; // brain-swap check: during these minutes...
   var SWAP_BUGS = 120;         // ...copy this many grown bugs with fresh random brains and measure them for a minute
                                // (random brains find little food late on, so fewer than ~100 gives a noisy answer)
   // Predator gate (Session 3): a meat-eater species appears by itself within GATE_MINUTES, meaning one
   // meat-eater species has at least GATE_MEMBERS alive at once, and the prey survive alongside it: the
-  // plant-eaters never fall below PREY_SURVIVE from then until the end of the run.
+  // plant-eaters never fall below PREY_SURVIVE (a quarter of the cap) from then until the end of the run.
   var GATE_MINUTES = 20, GATE_MEMBERS = 10, PREY_SURVIVE = 100;
+  var REF_CAP = 400;           // the full-size (laptop) cap that BOOM_POP and PREY_SURVIVE are written for
 
   // Prepare one seed's run. Call advance() repeatedly until it returns true.
-  function SeedRun(seed, minutes) {
+  // cap: the creature cap (default: the laptop cap; a phone world is 150). Smaller caps build a scaled-down
+  // world with GL.WorldRules, exactly as the app does on a phone.
+  function SeedRun(seed, minutes, cap) {
     this.seed = seed;
     this.minutes = minutes;
-    var w = this.world = new GL.World(seed, { cap: C.capLaptop });
+    cap = cap || C.capLaptop;
+    if (GL.WorldRules) GL.WorldRules.apply({ cap: cap });
+    this.boomPop = Math.round(BOOM_POP * cap / REF_CAP);
+    this.preySurvive = PREY_SURVIVE * cap / REF_CAP;
+    var w = this.world = new GL.World(seed, { cap: cap });
     this.totalTicks = Math.round(minutes * 60 * C.ticksPerSecond);
     this.ms = 0;
     // Life stories, for the report only. The two world methods are wrapped, never changed.
@@ -153,9 +161,9 @@ GL.Headless = (function () {
     ages.sort(function (a, b) { return a - b; });
 
     // The start: lowest population in minutes 1-5, and the minute the population first reached BOOM_POP.
-    var lowStart = Infinity, boomAt = -1;
-    for (i = 0; i < Math.min(5, mins.length); i++) lowStart = Math.min(lowStart, mins[i].popMin);
-    for (i = 0; i < mins.length; i++) if (mins[i].popEnd >= BOOM_POP) { boomAt = mins[i].minute; break; }
+    var lowStart = Infinity, lowStartAt = 0, boomAt = -1;
+    for (i = 0; i < Math.min(5, mins.length); i++) if (mins[i].popMin < lowStart) { lowStart = mins[i].popMin; lowStartAt = mins[i].minute; }
+    for (i = 0; i < mins.length; i++) if (mins[i].popEnd >= this.boomPop) { boomAt = mins[i].minute; break; }
 
     // Food per bug per minute: where it peaked, and where it ended.
     var peak = 0, peakAt = 0;
@@ -163,10 +171,12 @@ GL.Headless = (function () {
 
     // Population band check: once the population has boomed to half the cap, it must stay within 25%-100%
     // of the cap. (It starts at half the cap because a world now begins with 90 bugs, so it can pass a quarter
-    // of the cap within a minute and dip below it again while the starters die out, before any boom.)
+    // of the cap within a minute and dip below it again while the starters die out, before any boom. In a
+    // phone-size world the 100 starters are already two thirds of the cap, so it also waits for that die-off:
+    // the lowest point of minutes 1-5.)
     var establishedAt = -1, minAfter = Infinity, maxAfter = 0;
     for (i = 0; i < mins.length; i++) {
-      if (establishedAt < 0 && mins[i].popEnd >= cap * 0.5) establishedAt = mins[i].minute;
+      if (establishedAt < 0 && mins[i].popEnd >= cap * 0.5 && mins[i].minute >= lowStartAt) establishedAt = mins[i].minute;
       if (establishedAt >= 0 && mins[i].minute > establishedAt) {
         minAfter = Math.min(minAfter, mins[i].popMin);
         maxAfter = Math.max(maxAfter, mins[i].popMax);
@@ -196,7 +206,7 @@ GL.Headless = (function () {
       speciesName: this.predGateSpecies ? this.predGateSpecies.name : '',
       peak: predPeak, end: mins.length ? mins[mins.length - 1].predEnd : 0, at20: predAt20,
       preyMinAfter: preyMin,
-      gate: gateTime >= 0 && gateTime <= GATE_MINUTES * 60 && preyMin >= PREY_SURVIVE,
+      gate: gateTime >= 0 && gateTime <= GATE_MINUTES * 60 && preyMin >= this.preySurvive,
       eaten: s.deaths.eaten, meatSpeciesEver: meatSpeciesEver,
       predSpeed: mins.length ? mins[mins.length - 1].predSpeed : 0, preySpeed: mins.length ? mins[mins.length - 1].preySpeed : 0,
       predSize: mins.length ? mins[mins.length - 1].predSize : 0, preySize: mins.length ? mins[mins.length - 1].preySize : 0
@@ -226,6 +236,7 @@ GL.Headless = (function () {
       cappedShare: after10 ? cappedMinutes / after10 : 0,
       deathAgeMedian: quantile(ages, 0.5), oldAgeShare: ages.length ? oldAge / ages.length : 0,
       lowStart: lowStart === Infinity ? 0 : lowStart, boomAt: boomAt,
+      boomPop: this.boomPop, preySurvive: this.preySurvive,
       establishedAt: establishedAt,
       minAfter: minAfter === Infinity ? -1 : minAfter, maxAfter: maxAfter,
       inBand: establishedAt >= 0 && minAfter !== Infinity && minAfter >= low && maxAfter <= cap,
@@ -296,14 +307,14 @@ GL.Headless = (function () {
         '; most alive at once ' + p.peak + ', at minute ' + GATE_MINUTES + ' ' + (p.at20 < 0 ? '-' : p.at20) + ', at the end ' + p.end +
         '; ' + p.eaten + ' bugs eaten in all.');
       L.push('Prey after that: plant-eaters never fell below ' + (p.preyMinAfter < 0 ? '-' : p.preyMinAfter) +
-        (p.gate ? '  PASS (meat-eater species within ' + GATE_MINUTES + ' minutes, prey above ' + PREY_SURVIVE + ')' : '  no predator gate pass') +
+        (p.gate ? '  PASS (meat-eater species within ' + GATE_MINUTES + ' minutes, prey above ' + r.preySurvive + ')' : '  no predator gate pass') +
         '.  Last minute: meat-eaters walk at ' + Math.round(p.predSpeed) + ' and are size ' + f1(p.predSize) + ', plant-eaters ' +
         Math.round(p.preySpeed) + ' and ' + f1(p.preySize) + '.');
       L.push('Species: ' + r.species.ever + ' ever (' + r.species.announced + ' with ' + C.species.logMinMembers + '+ members, ' + r.species.meat +
         ' meat-eaters), ' + r.species.alive + ' alive at the end.  The population was at the cap in ' + pct(r.cappedShare) + ' of minutes after minute 10.');
     }
     L.push('Start: lowest population in minutes 1-5 = ' + r.lowStart + '; ' +
-      (r.boomAt > 0 ? 'reached ' + BOOM_POP + ' bugs in minute ' + r.boomAt : 'never reached ' + BOOM_POP + ' bugs') + '.');
+      (r.boomAt > 0 ? 'reached ' + r.boomPop + ' bugs in minute ' + r.boomAt : 'never reached ' + r.boomPop + ' bugs') + '.');
     L.push('Deaths by cause: starvation ' + r.deaths.starvation + ', old age ' + r.deaths.oldAge +
       ', eaten ' + r.deaths.eaten + ', disaster ' + r.deaths.disaster + '.  Births: ' + r.births + '.');
     L.push('Population floor: dropped below it ' + r.floorEpisodes + ' time(s) (' + r.floorAfter10 +
@@ -329,7 +340,7 @@ GL.Headless = (function () {
   function formatSummary(results) {
     var L = [];
     L.push('=== Summary ===');
-    L.push('  seed | skill min 1 | skill min 10 | change | doubled? | steering 1 -> 10 | clicked adult lives | babies never ate | low pop 1-5 | ' + BOOM_POP + ' bugs by' +
+    L.push('  seed | skill min 1 | skill min 10 | change | doubled? | steering 1 -> 10 | clicked adult lives | babies never ate | low pop 1-5 | ' + results[0].boomPop + ' bugs by' +
       ' | meat-eater species (' + GATE_MEMBERS + '+) | prey low after | predator gate');
     var passes = 0, rises = 0, gates = 0;
     for (var i = 0; i < results.length; i++) {
@@ -347,7 +358,7 @@ GL.Headless = (function () {
     L.push('Foraging skill doubled within 10 simulated minutes in ' + passes + ' of ' + results.length + ' seeds.');
     L.push('Steering toward food clearly rose by minute 10 in ' + rises + ' of ' + results.length + ' seeds.');
     L.push('A meat-eater species appeared by itself (' + GATE_MEMBERS + '+ alive at once) within ' + GATE_MINUTES +
-      ' simulated minutes, with plant-eaters staying above ' + PREY_SURVIVE + ', in ' + gates + ' of ' + results.length + ' seeds.');
+      ' simulated minutes, with plant-eaters staying above ' + results[0].preySurvive + ', in ' + gates + ' of ' + results.length + ' seeds.');
     return L.join('\n');
   }
 
